@@ -6,6 +6,7 @@ export interface Driver {
   email?: string;
   vehicle_number?: string;
   vehicle_type?: string;
+  vehicle_image?: string;
   gender?: string;
   is_online: boolean;
   is_verified: boolean;

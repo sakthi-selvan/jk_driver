@@ -59,6 +59,7 @@ export default function RootLayout() {
         <Stack.Screen name="rides-enhanced" />
         <Stack.Screen name="wallet" />
         <Stack.Screen name="ride-details" />
+        <Stack.Screen name="ride-ui-preview" />
       </Stack>
       <StatusBar style="dark" />
     </ThemeProvider>

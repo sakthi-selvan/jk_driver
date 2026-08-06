@@ -15,6 +15,7 @@ export interface DriverCompleteRegistrationData {
   gender?: string;
   license_document: string;
   aadhar_document: string;
+  vehicle_image?: string;
 }
 
 export const authApi = {

@@ -101,10 +101,19 @@ export default function ProfileScreen() {
             <MenuItem
               icon="person-outline"
               title="Edit Profile"
-              subtitle="Name, gender, vehicle details"
+              subtitle="Name, gender, vehicle photo & plate"
               onPress={() => router.push('/edit-profile')}
               iconColor="#8B5CF6"
               iconBg="#F3E8FF"
+            />
+            <View style={styles.menuDivider} />
+            <MenuItem
+              icon="play-circle-outline"
+              title="Ride flow preview"
+              subtitle="Accept → pickup → OTP → complete (demo)"
+              onPress={() => router.push('/ride-ui-preview')}
+              iconColor="#0D9488"
+              iconBg="#CCFBF1"
             />
             <View style={styles.menuDivider} />
             <MenuItem

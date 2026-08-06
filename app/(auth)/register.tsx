@@ -36,6 +36,7 @@ export default function RegisterScreen() {
   const [gender, setGender] = useState('');
   const [vehicleNumber, setVehicleNumber] = useState('');
   const [vehicleType, setVehicleType] = useState('');
+  const [vehicleImage, setVehicleImage] = useState<string | null>(null);
   const [licenseImage, setLicenseImage] = useState<string | null>(null);
   const [aadharImage, setAadharImage] = useState<string | null>(null);
   const [errors, setErrors] = useState({ name: '', email: '', vehicle: '', documents: '' });
@@ -55,7 +56,7 @@ export default function RegisterScreen() {
     );
   }
 
-  const pickImage = async (type: 'license' | 'aadhar', source: 'camera' | 'gallery') => {
+  const pickImage = async (type: 'license' | 'aadhar' | 'vehicle', source: 'camera' | 'gallery') => {
     if (!ImagePicker) {
       Alert.alert('Not available', 'Document upload needs a development / production build.');
       return;
@@ -80,12 +81,15 @@ export default function RegisterScreen() {
     if (!result.canceled && result.assets[0]?.base64) {
       const base64 = `data:image/jpeg;base64,${result.assets[0].base64}`;
       if (type === 'license') setLicenseImage(base64);
-      else setAadharImage(base64);
+      else if (type === 'aadhar') setAadharImage(base64);
+      else setVehicleImage(base64);
     }
   };
 
-  const showImageOptions = (type: 'license' | 'aadhar') => {
-    Alert.alert(type === 'license' ? 'Upload License' : 'Upload Aadhar', 'Choose an option', [
+  const showImageOptions = (type: 'license' | 'aadhar' | 'vehicle') => {
+    const title =
+      type === 'license' ? 'Upload License' : type === 'aadhar' ? 'Upload Aadhar' : 'Vehicle photo';
+    Alert.alert(title, 'Choose an option', [
       { text: 'Camera', onPress: () => pickImage(type, 'camera') },
       { text: 'Gallery', onPress: () => pickImage(type, 'gallery') },
       { text: 'Cancel', style: 'cancel' },
@@ -112,6 +116,10 @@ export default function RegisterScreen() {
       }
       if (!vehicleType) {
         next.vehicle = next.vehicle || 'Select a vehicle type';
+        ok = false;
+      }
+      if (!vehicleImage) {
+        next.vehicle = next.vehicle || 'Add a clear photo of your vehicle';
         ok = false;
       }
     }
@@ -143,6 +151,7 @@ export default function RegisterScreen() {
         vehicle_type: vehicleType,
         license_document: licenseImage,
         aadhar_document: aadharImage,
+        vehicle_image: vehicleImage || undefined,
       });
       Alert.alert(
         'Submitted for approval',
@@ -243,6 +252,24 @@ export default function RegisterScreen() {
                     </TouchableOpacity>
                   ))}
                 </View>
+                <Text style={styles.chipLabel}>Vehicle photo (shown to riders)</Text>
+                <TouchableOpacity
+                  style={[styles.uploadBox, vehicleImage && styles.uploadBoxDone]}
+                  onPress={() => showImageOptions('vehicle')}
+                >
+                  {vehicleImage ? (
+                    <View style={styles.uploadedContainer}>
+                      <Image source={{ uri: vehicleImage }} style={styles.uploadedImage} />
+                      <Text style={styles.uploadedText}>Vehicle photo added</Text>
+                    </View>
+                  ) : (
+                    <View style={styles.uploadPlaceholder}>
+                      <Ionicons name="camera-outline" size={32} color="#666" />
+                      <Text style={styles.uploadLabel}>Vehicle photo</Text>
+                      <Text style={styles.uploadHint}>Riders use this + plate at pickup</Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
               </>
             )}
 
