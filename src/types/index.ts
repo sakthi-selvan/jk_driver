@@ -14,22 +14,6 @@ export interface Driver {
 }
 
 // Auth types
-export interface LoginCredentials {
-  phone: string;
-  password: string;
-}
-
-export interface RegisterData {
-  phone: string;
-  name: string;
-  email?: string;
-  password: string;
-  vehicle_number?: string;
-  vehicle_type?: string;
-  license_document?: string;
-  aadhar_document?: string;
-}
-
 export interface AuthResponse {
   access_token: string;
   refresh_token: string;

@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { ActivityIndicator, View } from 'react-native';
 import { DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack, router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -11,24 +12,31 @@ export const unstable_settings = {
 };
 
 export default function RootLayout() {
-  const { isAuthenticated, isLoading, loadDriver } = useAuthStore();
+  const { isAuthenticated, isInitializing, accessToken, accountStatus, loadDriver } = useAuthStore();
 
   useEffect(() => {
     loadDriver();
   }, []);
 
   useEffect(() => {
-    if (!isLoading) {
-      if (isAuthenticated) {
-        router.replace('/');
-      } else {
-        router.replace('/(auth)/login');
-      }
+    if (isInitializing) return;
+    if (isAuthenticated) {
+      router.replace('/');
+      return;
     }
-  }, [isAuthenticated, isLoading]);
+    // OTP verified but signup/approval still open — keep auth stack
+    if (accessToken && (accountStatus === 'incomplete' || accountStatus === 'pending')) {
+      return;
+    }
+    router.replace('/(auth)/login');
+  }, [isAuthenticated, isInitializing, accessToken, accountStatus]);
 
-  if (isLoading) {
-    return null;
+  if (isInitializing) {
+    return (
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.background }}>
+        <ActivityIndicator size="large" color={Colors.primary} />
+      </View>
+    );
   }
 
   return (

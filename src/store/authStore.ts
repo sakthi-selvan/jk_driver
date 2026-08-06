@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Driver, AuthResponse } from '../types';
-import { authApi } from '../api/auth';
+import { Driver } from '../types';
+import { authApi, DriverCompleteRegistrationData, DriverOTPAuthResponse } from '../api/auth';
 import { setApiToken, clearApiToken } from '../api/client';
 
 interface AuthState {
@@ -10,101 +10,118 @@ interface AuthState {
   refreshToken: string | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  isInitializing: boolean;
   error: string | null;
 
-  // Actions
-  login: (phone: string, password: string) => Promise<void>;
-  register: (name: string, phone: string, email: string, password: string, vehicleNumber?: string, vehicleType?: string, licenseDocument?: string, aadharDocument?: string) => Promise<void>;
+  otpSent: boolean;
+  otpPhone: string | null;
+  isNewDriver: boolean;
+  accountStatus: 'active' | 'pending' | 'incomplete' | null;
+
+  sendOTP: (phone: string) => Promise<void>;
+  verifyOTP: (phone: string, otp: string) => Promise<DriverOTPAuthResponse>;
+  completeRegistration: (data: DriverCompleteRegistrationData) => Promise<void>;
   logout: () => Promise<void>;
   loadDriver: () => Promise<void>;
   clearError: () => void;
+  resetOTPState: () => void;
 }
 
-export const useAuthStore = create<AuthState>((set) => ({
+async function persistSession(accessToken: string, refreshToken: string, driver?: Driver | null) {
+  setApiToken(accessToken);
+  try {
+    await AsyncStorage.setItem('access_token', accessToken);
+    await AsyncStorage.setItem('refresh_token', refreshToken);
+    if (driver) {
+      await AsyncStorage.setItem('driver', JSON.stringify(driver));
+    }
+  } catch (storageError) {
+    console.log('⚠️  Storage error:', storageError);
+  }
+}
+
+export const useAuthStore = create<AuthState>((set, get) => ({
   driver: null,
   accessToken: null,
   refreshToken: null,
   isAuthenticated: false,
-  isLoading: true,
+  isLoading: false,
+  isInitializing: true,
   error: null,
+  otpSent: false,
+  otpPhone: null,
+  isNewDriver: false,
+  accountStatus: null,
 
-  login: async (phone: string, password: string) => {
+  sendOTP: async (phone: string) => {
     try {
       set({ isLoading: true, error: null });
-      const response = await authApi.login({ phone, password });
-
-      // Set token in memory FIRST before profile request
-      setApiToken(response.access_token);
-
-      try {
-        await AsyncStorage.setItem('access_token', response.access_token);
-        await AsyncStorage.setItem('refresh_token', response.refresh_token);
-      } catch (storageError) {
-        console.log('⚠️  Storage error (tokens will be in memory only):', storageError);
-      }
-
-      // Load driver profile (will now use in-memory token)
-      const driver = await authApi.getProfile();
-      try {
-        await AsyncStorage.setItem('driver', JSON.stringify(driver));
-      } catch (storageError) {
-        console.log('⚠️  Storage error (driver will be in memory only):', storageError);
-      }
-
-      set({
-        driver,
-        accessToken: response.access_token,
-        refreshToken: response.refresh_token,
-        isAuthenticated: true,
-        isLoading: false,
-      });
+      await authApi.sendOTP(phone);
+      set({ otpSent: true, otpPhone: phone, isLoading: false });
     } catch (error: any) {
       set({
-        error: error.response?.data?.detail || 'Login failed',
+        error: error.response?.data?.detail || 'Failed to send OTP',
         isLoading: false,
       });
       throw error;
     }
   },
 
-  register: async (name: string, phone: string, email: string, password: string, vehicleNumber?: string, vehicleType?: string, licenseDocument?: string, aadharDocument?: string) => {
+  verifyOTP: async (phone: string, otp: string) => {
     try {
       set({ isLoading: true, error: null });
-      const response = await authApi.register({
-        name,
-        phone,
-        email,
-        password,
-        vehicle_number: vehicleNumber,
-        vehicle_type: vehicleType,
-        license_document: licenseDocument,
-        aadhar_document: aadharDocument,
-      });
+      const response = await authApi.verifyOTP(phone, otp);
 
-      // Set token in memory FIRST before profile request
-      setApiToken(response.access_token);
-
-      try {
-        await AsyncStorage.setItem('access_token', response.access_token);
-        await AsyncStorage.setItem('refresh_token', response.refresh_token);
-      } catch (storageError) {
-        console.log('⚠️  Storage error (tokens will be in memory only):', storageError);
-      }
-
-      // Load driver profile (will now use in-memory token)
-      const driver = await authApi.getProfile();
-      try {
-        await AsyncStorage.setItem('driver', JSON.stringify(driver));
-      } catch (storageError) {
-        console.log('⚠️  Storage error (driver will be in memory only):', storageError);
-      }
+      await persistSession(response.access_token, response.refresh_token);
 
       set({
-        driver,
         accessToken: response.access_token,
         refreshToken: response.refresh_token,
-        isAuthenticated: true,
+        isNewDriver: response.is_new_driver,
+        accountStatus: response.account_status,
+      });
+
+      if (response.account_status === 'active') {
+        const driver = await authApi.getProfile();
+        try {
+          await AsyncStorage.setItem('driver', JSON.stringify(driver));
+        } catch {}
+        set({
+          driver,
+          isAuthenticated: true,
+          isLoading: false,
+          otpSent: false,
+          otpPhone: null,
+        });
+      } else {
+        // pending or incomplete — keep tokens, not fully authenticated for home
+        set({
+          isAuthenticated: false,
+          isLoading: false,
+          otpSent: false,
+          otpPhone: null,
+        });
+      }
+
+      return response;
+    } catch (error: any) {
+      set({
+        error: error.response?.data?.detail || 'Invalid OTP',
         isLoading: false,
+      });
+      throw error;
+    }
+  },
+
+  completeRegistration: async (data: DriverCompleteRegistrationData) => {
+    try {
+      set({ isLoading: true, error: null });
+      await authApi.completeRegistration(data);
+      set({
+        isLoading: false,
+        isNewDriver: false,
+        accountStatus: 'pending',
+        isAuthenticated: false,
       });
     } catch (error: any) {
       set({
@@ -127,32 +144,47 @@ export const useAuthStore = create<AuthState>((set) => ({
       accessToken: null,
       refreshToken: null,
       isAuthenticated: false,
+      otpSent: false,
+      otpPhone: null,
+      isNewDriver: false,
+      accountStatus: null,
+      error: null,
     });
   },
 
   loadDriver: async () => {
     try {
-      set({ isLoading: true });
+      set({ isInitializing: true });
       const token = await AsyncStorage.getItem('access_token');
       const driverStr = await AsyncStorage.getItem('driver');
 
       if (token && driverStr) {
-        const driver = JSON.parse(driverStr);
+        const driver = JSON.parse(driverStr) as Driver;
         setApiToken(token);
-        set({
-          driver,
-          accessToken: token,
-          isAuthenticated: true,
-          isLoading: false,
-        });
-      } else {
-        set({ isLoading: false });
+        if (driver.is_active) {
+          set({
+            driver,
+            accessToken: token,
+            isAuthenticated: true,
+            isInitializing: false,
+            accountStatus: 'active',
+          });
+          return;
+        }
       }
+      set({ isInitializing: false, isAuthenticated: false });
     } catch (error) {
       console.log('⚠️  Storage error during load:', error);
-      set({ isLoading: false });
+      set({ isInitializing: false });
     }
   },
 
   clearError: () => set({ error: null }),
+
+  resetOTPState: () =>
+    set({
+      otpSent: false,
+      otpPhone: null,
+      error: null,
+    }),
 }));

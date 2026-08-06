@@ -1,26 +1,48 @@
 import apiClient from './client';
-import { LoginCredentials, RegisterData, AuthResponse, Driver } from '../types';
+import { AuthResponse, Driver } from '../types';
+
+export interface DriverOTPAuthResponse extends AuthResponse {
+  is_new_driver: boolean;
+  is_active: boolean;
+  account_status: 'active' | 'pending' | 'incomplete';
+}
+
+export interface DriverCompleteRegistrationData {
+  name: string;
+  email?: string;
+  vehicle_number?: string;
+  vehicle_type?: string;
+  gender?: string;
+  license_document: string;
+  aadhar_document: string;
+}
 
 export const authApi = {
-  // Register new driver
-  register: async (data: RegisterData): Promise<AuthResponse> => {
-    const response = await apiClient.post<AuthResponse>('/api/auth/driver/register', data);
+  sendOTP: async (phone: string): Promise<{ message: string; otp_length: number }> => {
+    const response = await apiClient.post('/api/auth/driver/send-otp', { phone });
     return response.data;
   },
 
-  // Login driver
-  login: async (credentials: LoginCredentials): Promise<AuthResponse> => {
-    const response = await apiClient.post<AuthResponse>('/api/auth/driver/login', credentials);
+  verifyOTP: async (phone: string, otp: string): Promise<DriverOTPAuthResponse> => {
+    const response = await apiClient.post<DriverOTPAuthResponse>('/api/auth/driver/verify-otp', {
+      phone,
+      otp,
+    });
     return response.data;
   },
 
-  // Get driver profile
+  completeRegistration: async (
+    data: DriverCompleteRegistrationData
+  ): Promise<{ message: string; account_status: string }> => {
+    const response = await apiClient.put('/api/auth/driver/complete-registration', data);
+    return response.data;
+  },
+
   getProfile: async (): Promise<Driver> => {
     const response = await apiClient.get<Driver>('/api/driver/profile');
     return response.data;
   },
 
-  // Update driver profile
   updateProfile: async (data: Partial<Driver>): Promise<Driver> => {
     const response = await apiClient.put<Driver>('/api/driver/profile', data);
     return response.data;

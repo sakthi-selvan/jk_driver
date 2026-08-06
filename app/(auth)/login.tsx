@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   Alert,
   TouchableOpacity,
   Linking,
+  TextInput,
 } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -18,63 +19,85 @@ import { Button } from '../../src/components/common/Button';
 import { Input } from '../../src/components/common/Input';
 import { Card } from '../../src/components/common/Card';
 import { Colors, Spacing, FontSizes, FontWeights, BorderRadius } from '../../src/constants/theme';
-import { validatePhone, validatePassword } from '../../src/utils/validation';
+import { validatePhone } from '../../src/utils/validation';
 
 const SUPPORT_PHONE = '9876543210';
 const SUPPORT_EMAIL = 'support@jktaxitamilnadu.com';
 
 export default function LoginScreen() {
   const [phone, setPhone] = useState('');
-  const [password, setPassword] = useState('');
-  const [errors, setErrors] = useState({ phone: '', password: '' });
+  const [otp, setOtp] = useState(['', '', '', '']);
+  const [phoneError, setPhoneError] = useState('');
   const [showPendingScreen, setShowPendingScreen] = useState(false);
+  const otpRefs = useRef<(TextInput | null)[]>([]);
 
-  const { login, isLoading, error, clearError } = useAuthStore();
+  const {
+    sendOTP,
+    verifyOTP,
+    otpSent,
+    isLoading,
+    error,
+    clearError,
+    resetOTPState,
+  } = useAuthStore();
 
-  const validateForm = (): boolean => {
-    const newErrors = { phone: '', password: '' };
-    let isValid = true;
-
+  const handleSendOTP = async () => {
+    setPhoneError('');
     if (!validatePhone(phone)) {
-      newErrors.phone = 'Please enter a valid 10-digit phone number';
-      isValid = false;
+      setPhoneError('Please enter a valid 10-digit phone number');
+      return;
     }
-
-    if (!validatePassword(password)) {
-      newErrors.password = 'Password must be at least 6 characters';
-      isValid = false;
-    }
-
-    setErrors(newErrors);
-    return isValid;
-  };
-
-  const handleLogin = async () => {
-    if (!validateForm()) return;
-
     try {
       clearError();
-      await login(phone, password);
-      router.replace('/');
-    } catch (err: any) {
-      const detail = err?.response?.data?.detail || error || '';
-      if (detail === 'ACCOUNT_PENDING_APPROVAL' || err?.response?.status === 403) {
-        setShowPendingScreen(true);
-      } else {
-        Alert.alert('Login Failed', 'Please check your credentials');
-      }
+      await sendOTP(phone);
+      setOtp(['', '', '', '']);
+    } catch {
+      // store error
     }
   };
 
-  const handleCallSupport = () => {
-    Linking.openURL(`tel:${SUPPORT_PHONE}`);
+  const handleOTPChange = (value: string, index: number) => {
+    const digit = value.replace(/[^0-9]/g, '').slice(-1);
+    const next = [...otp];
+    next[index] = digit;
+    setOtp(next);
+    if (digit && index < 3) otpRefs.current[index + 1]?.focus();
+    if (digit && index === 3) {
+      const code = next.join('');
+      if (code.length === 4) handleVerifyOTP(code);
+    }
   };
 
-  const handleEmailSupport = () => {
-    Linking.openURL(`mailto:${SUPPORT_EMAIL}?subject=Driver Account Approval`);
+  const handleOTPKeyPress = (key: string, index: number) => {
+    if (key === 'Backspace' && !otp[index] && index > 0) {
+      otpRefs.current[index - 1]?.focus();
+    }
   };
 
-  // Pending Approval Screen
+  const handleVerifyOTP = async (otpCode?: string) => {
+    const code = otpCode || otp.join('');
+    if (code.length !== 4) return;
+    try {
+      clearError();
+      const result = await verifyOTP(phone, code);
+      if (result.account_status === 'active') {
+        router.replace('/');
+      } else if (result.account_status === 'incomplete' || result.is_new_driver) {
+        router.replace('/(auth)/register');
+      } else {
+        setShowPendingScreen(true);
+      }
+    } catch {
+      setOtp(['', '', '', '']);
+      otpRefs.current[0]?.focus();
+    }
+  };
+
+  const handleChangePhone = () => {
+    resetOTPState();
+    setOtp(['', '', '', '']);
+  };
+
   if (showPendingScreen) {
     return (
       <SafeAreaView style={styles.container}>
@@ -82,43 +105,41 @@ export default function LoginScreen() {
           <View style={styles.pendingIconBox}>
             <Ionicons name="hourglass-outline" size={64} color="#F59E0B" />
           </View>
-
           <Text style={styles.pendingTitle}>Account Pending Approval</Text>
           <Text style={styles.pendingSubtitle}>
-            Your account has been created successfully. Our admin team is reviewing your documents.
+            Your documents are under review. You can go online once an admin approves your account.
           </Text>
-
           <View style={styles.pendingInfoBox}>
             <Ionicons name="information-circle" size={20} color="#3B82F6" />
             <Text style={styles.pendingInfoText}>
-              You will be able to login once your documents (License & Aadhar) are verified and your account is approved by our team.
+              License and Aadhar must be verified before you can accept rides.
             </Text>
           </View>
-
           <Text style={styles.contactTitle}>Need help? Contact us</Text>
-
-          <TouchableOpacity style={styles.contactBtn} onPress={handleCallSupport}>
+          <TouchableOpacity style={styles.contactBtn} onPress={() => Linking.openURL(`tel:${SUPPORT_PHONE}`)}>
             <Ionicons name="call" size={22} color="#4CAF50" />
             <View style={styles.contactBtnContent}>
               <Text style={styles.contactBtnLabel}>Call Support</Text>
               <Text style={styles.contactBtnValue}>{SUPPORT_PHONE}</Text>
             </View>
-            <Ionicons name="chevron-forward" size={20} color="#999" />
           </TouchableOpacity>
-
-          <TouchableOpacity style={styles.contactBtn} onPress={handleEmailSupport}>
+          <TouchableOpacity
+            style={styles.contactBtn}
+            onPress={() => Linking.openURL(`mailto:${SUPPORT_EMAIL}?subject=Driver Account Approval`)}
+          >
             <Ionicons name="mail" size={22} color="#3B82F6" />
             <View style={styles.contactBtnContent}>
               <Text style={styles.contactBtnLabel}>Email Support</Text>
               <Text style={styles.contactBtnValue}>{SUPPORT_EMAIL}</Text>
             </View>
-            <Ionicons name="chevron-forward" size={20} color="#999" />
           </TouchableOpacity>
-
           <Button
-            title="Back to Login"
+            title="Back"
             variant="ghost"
-            onPress={() => setShowPendingScreen(false)}
+            onPress={() => {
+              setShowPendingScreen(false);
+              handleChangePhone();
+            }}
             style={styles.backBtn}
           />
         </View>
@@ -132,58 +153,77 @@ export default function LoginScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.keyboardView}
       >
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-        >
+        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           <View style={styles.header}>
             <View style={styles.logoContainer}>
               <Ionicons name="car-sport" size={48} color={Colors.primary} />
             </View>
             <Text style={styles.title}>JK Taxi Driver</Text>
-            <Text style={styles.subtitle}>Login to start earning</Text>
+            <Text style={styles.subtitle}>
+              {otpSent ? 'Enter the OTP sent to your phone' : 'Sign in with your phone number'}
+            </Text>
           </View>
 
           <Card elevated style={styles.formCard}>
-            <Input
-              label="Phone Number"
-              placeholder="Enter your phone number"
-              value={phone}
-              onChangeText={setPhone}
-              keyboardType="phone-pad"
-              maxLength={10}
-              icon="call-outline"
-              error={errors.phone}
-            />
-
-            <Input
-              label="Password"
-              placeholder="Enter your password"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-              icon="lock-closed-outline"
-              error={errors.password}
-            />
-
-            <Button
-              title="Login"
-              onPress={handleLogin}
-              loading={isLoading}
-              fullWidth
-              style={styles.loginButton}
-            />
+            {!otpSent ? (
+              <>
+                <Input
+                  label="Phone Number"
+                  placeholder="10-digit mobile number"
+                  value={phone}
+                  onChangeText={setPhone}
+                  keyboardType="phone-pad"
+                  maxLength={10}
+                  icon="call-outline"
+                  error={phoneError}
+                />
+                {error ? <Text style={styles.errorText}>{error}</Text> : null}
+                <Button
+                  title="Send OTP"
+                  onPress={handleSendOTP}
+                  loading={isLoading}
+                  fullWidth
+                  style={styles.loginButton}
+                />
+              </>
+            ) : (
+              <>
+                <View style={styles.phoneDisplay}>
+                  <Text style={styles.phoneLabel}>OTP sent to</Text>
+                  <Text style={styles.phoneNumber}>+91 {phone}</Text>
+                  <Button title="Change" variant="ghost" size="small" onPress={handleChangePhone} />
+                </View>
+                <View style={styles.otpContainer}>
+                  {otp.map((digit, index) => (
+                    <TextInput
+                      key={index}
+                      ref={(ref) => {
+                        otpRefs.current[index] = ref;
+                      }}
+                      style={[styles.otpInput, digit ? styles.otpInputFilled : null]}
+                      value={digit}
+                      onChangeText={(v) => handleOTPChange(v, index)}
+                      onKeyPress={({ nativeEvent }) => handleOTPKeyPress(nativeEvent.key, index)}
+                      keyboardType="number-pad"
+                      maxLength={1}
+                      autoFocus={index === 0}
+                    />
+                  ))}
+                </View>
+                {error ? <Text style={styles.errorText}>{error}</Text> : null}
+                <Button
+                  title="Verify OTP"
+                  onPress={() => handleVerifyOTP()}
+                  loading={isLoading}
+                  fullWidth
+                  style={styles.loginButton}
+                />
+                <Button title="Resend OTP" variant="ghost" onPress={handleSendOTP} disabled={isLoading} />
+              </>
+            )}
           </Card>
 
-          <View style={styles.footer}>
-            <Text style={styles.footerText}>Don&apos;t have an account?</Text>
-            <Button
-              title="Sign Up"
-              variant="ghost"
-              size="small"
-              onPress={() => router.push('/(auth)/register')}
-            />
-          </View>
+          <Text style={styles.hint}>New captain? Verify OTP, then complete your profile & documents.</Text>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -191,22 +231,10 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.background,
-  },
-  keyboardView: {
-    flex: 1,
-  },
-  scrollContent: {
-    flexGrow: 1,
-    padding: Spacing.lg,
-    justifyContent: 'center',
-  },
-  header: {
-    alignItems: 'center',
-    marginBottom: Spacing.xl,
-  },
+  container: { flex: 1, backgroundColor: Colors.background },
+  keyboardView: { flex: 1 },
+  scrollContent: { flexGrow: 1, padding: Spacing.lg, justifyContent: 'center' },
+  header: { alignItems: 'center', marginBottom: Spacing.xl },
   logoContainer: {
     width: 80,
     height: 80,
@@ -226,29 +254,53 @@ const styles = StyleSheet.create({
     fontSize: FontSizes.md,
     color: Colors.textSecondary,
     textAlign: 'center',
+    paddingHorizontal: Spacing.md,
   },
-  formCard: {
-    marginBottom: Spacing.lg,
+  formCard: { marginBottom: Spacing.lg },
+  loginButton: { marginTop: Spacing.md },
+  errorText: {
+    color: Colors.error || '#EF4444',
+    fontSize: FontSizes.sm,
+    marginBottom: Spacing.sm,
+    textAlign: 'center',
   },
-  loginButton: {
-    marginTop: Spacing.md,
+  phoneDisplay: { alignItems: 'center', marginBottom: Spacing.md },
+  phoneLabel: { fontSize: FontSizes.sm, color: Colors.textSecondary },
+  phoneNumber: {
+    fontSize: FontSizes.lg,
+    fontWeight: FontWeights.bold,
+    color: Colors.text,
+    marginVertical: 4,
   },
-  footer: {
+  otpContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
-    alignItems: 'center',
+    gap: 12,
+    marginBottom: Spacing.md,
   },
-  footerText: {
-    fontSize: FontSizes.md,
+  otpInput: {
+    width: 52,
+    height: 56,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: '#E0E0E0',
+    backgroundColor: '#FAFAFA',
+    textAlign: 'center',
+    fontSize: 22,
+    fontWeight: '700',
+    color: Colors.text,
+  },
+  otpInputFilled: {
+    borderColor: Colors.primary,
+    backgroundColor: '#F5F3FF',
+  },
+  hint: {
+    textAlign: 'center',
+    fontSize: FontSizes.sm,
     color: Colors.textSecondary,
+    lineHeight: 20,
   },
-
-  // Pending Approval Screen
-  pendingContainer: {
-    flex: 1,
-    padding: Spacing.xl,
-    justifyContent: 'center',
-  },
+  pendingContainer: { flex: 1, padding: Spacing.xl, justifyContent: 'center' },
   pendingIconBox: {
     width: 100,
     height: 100,
@@ -305,21 +357,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E0E0E0',
   },
-  contactBtnContent: {
-    flex: 1,
-    marginLeft: Spacing.md,
-  },
-  contactBtnLabel: {
-    fontSize: FontSizes.md,
-    fontWeight: FontWeights.semibold,
-    color: '#333',
-  },
-  contactBtnValue: {
-    fontSize: FontSizes.sm,
-    color: '#666',
-    marginTop: 2,
-  },
-  backBtn: {
-    marginTop: Spacing.xl,
-  },
+  contactBtnContent: { flex: 1, marginLeft: Spacing.md },
+  contactBtnLabel: { fontSize: FontSizes.md, fontWeight: FontWeights.semibold, color: '#333' },
+  contactBtnValue: { fontSize: FontSizes.sm, color: '#666', marginTop: 2 },
+  backBtn: { marginTop: Spacing.xl },
 });

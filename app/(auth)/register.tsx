@@ -16,186 +16,152 @@ import { Ionicons } from '@expo/vector-icons';
 let ImagePicker: any = null;
 try {
   ImagePicker = require('expo-image-picker');
-} catch (e) {
-  // Not available in Expo Go
+} catch {
+  // Expo Go may not have it
 }
 import { useAuthStore } from '../../src/store/authStore';
 import { Button } from '../../src/components/common/Button';
 import { Input } from '../../src/components/common/Input';
 import { Card } from '../../src/components/common/Card';
 import { Colors, Spacing, FontSizes, FontWeights, BorderRadius } from '../../src/constants/theme';
-import {
-  validatePhone,
-  validateEmail,
-  validatePassword,
-  validateName,
-} from '../../src/utils/validation';
+import { validateEmail, validateName } from '../../src/utils/validation';
+
+const VEHICLE_TYPES = ['Auto', 'Bike', 'Mini', 'Sedan', 'SUV'];
+const STEPS = ['Profile', 'Vehicle', 'Documents'] as const;
 
 export default function RegisterScreen() {
+  const [step, setStep] = useState(0);
   const [name, setName] = useState('');
-  const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
+  const [gender, setGender] = useState('');
   const [vehicleNumber, setVehicleNumber] = useState('');
   const [vehicleType, setVehicleType] = useState('');
   const [licenseImage, setLicenseImage] = useState<string | null>(null);
   const [aadharImage, setAadharImage] = useState<string | null>(null);
-  const [errors, setErrors] = useState({
-    name: '',
-    phone: '',
-    email: '',
-    password: '',
-    confirmPassword: '',
-    documents: '',
-  });
+  const [errors, setErrors] = useState({ name: '', email: '', vehicle: '', documents: '' });
 
-  const { register, isLoading, error, clearError } = useAuthStore();
+  const { completeRegistration, isLoading, error, clearError, logout, accessToken } = useAuthStore();
 
-  const pickImage = async (type: 'license' | 'aadhar') => {
+  // Must arrive via OTP (token in memory)
+  if (!accessToken) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.gate}>
+          <Text style={styles.gateTitle}>Verify your phone first</Text>
+          <Text style={styles.gateSub}>Sign in with OTP, then complete your captain profile.</Text>
+          <Button title="Go to login" onPress={() => router.replace('/(auth)/login')} fullWidth />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  const pickImage = async (type: 'license' | 'aadhar', source: 'camera' | 'gallery') => {
     if (!ImagePicker) {
-      Alert.alert('Not Available', 'Image picker requires a development build. Please use a dev build to upload documents.');
+      Alert.alert('Not available', 'Document upload needs a development / production build.');
       return;
     }
-
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission needed', 'Please allow access to photos to upload documents.');
+    const permission =
+      source === 'camera'
+        ? await ImagePicker.requestCameraPermissionsAsync()
+        : await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (permission.status !== 'granted') {
+      Alert.alert('Permission needed', 'Please allow access to continue.');
       return;
     }
-
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsEditing: true,
-      quality: 0.45,
-      base64: true,
-    });
-
+    const result =
+      source === 'camera'
+        ? await ImagePicker.launchCameraAsync({ allowsEditing: true, quality: 0.45, base64: true })
+        : await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ['images'],
+            allowsEditing: true,
+            quality: 0.45,
+            base64: true,
+          });
     if (!result.canceled && result.assets[0]?.base64) {
       const base64 = `data:image/jpeg;base64,${result.assets[0].base64}`;
-      if (type === 'license') {
-        setLicenseImage(base64);
-      } else {
-        setAadharImage(base64);
-      }
-    }
-  };
-
-  const takePhoto = async (type: 'license' | 'aadhar') => {
-    if (!ImagePicker) {
-      Alert.alert('Not Available', 'Camera requires a development build. Please use a dev build to upload documents.');
-      return;
-    }
-
-    const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission needed', 'Please allow camera access to take photos.');
-      return;
-    }
-
-    const result = await ImagePicker.launchCameraAsync({
-      allowsEditing: true,
-      quality: 0.45,
-      base64: true,
-    });
-
-    if (!result.canceled && result.assets[0]?.base64) {
-      const base64 = `data:image/jpeg;base64,${result.assets[0].base64}`;
-      if (type === 'license') {
-        setLicenseImage(base64);
-      } else {
-        setAadharImage(base64);
-      }
+      if (type === 'license') setLicenseImage(base64);
+      else setAadharImage(base64);
     }
   };
 
   const showImageOptions = (type: 'license' | 'aadhar') => {
-    if (!ImagePicker) {
-      Alert.alert('Development Build Required', 'Document upload requires a development build (not Expo Go). The upload will work in your production APK.');
-      return;
-    }
-    Alert.alert(
-      type === 'license' ? 'Upload License' : 'Upload Aadhar Card',
-      'Choose an option',
-      [
-        { text: 'Camera', onPress: () => takePhoto(type) },
-        { text: 'Gallery', onPress: () => pickImage(type) },
-        { text: 'Cancel', style: 'cancel' },
-      ]
-    );
+    Alert.alert(type === 'license' ? 'Upload License' : 'Upload Aadhar', 'Choose an option', [
+      { text: 'Camera', onPress: () => pickImage(type, 'camera') },
+      { text: 'Gallery', onPress: () => pickImage(type, 'gallery') },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
   };
 
-  const validateForm = (): boolean => {
-    const newErrors = {
-      name: '',
-      phone: '',
-      email: '',
-      password: '',
-      confirmPassword: '',
-      documents: '',
-    };
-    let isValid = true;
-
-    if (!validateName(name)) {
-      newErrors.name = 'Name must be at least 2 characters';
-      isValid = false;
+  const validateStep = (): boolean => {
+    const next = { name: '', email: '', vehicle: '', documents: '' };
+    let ok = true;
+    if (step === 0) {
+      if (!validateName(name)) {
+        next.name = 'Enter your full name';
+        ok = false;
+      }
+      if (email && !validateEmail(email)) {
+        next.email = 'Enter a valid email';
+        ok = false;
+      }
     }
-
-    if (!validatePhone(phone)) {
-      newErrors.phone = 'Please enter a valid 10-digit phone number';
-      isValid = false;
+    if (step === 1) {
+      if (!vehicleNumber.trim() || vehicleNumber.trim().length < 4) {
+        next.vehicle = 'Enter a valid vehicle number';
+        ok = false;
+      }
+      if (!vehicleType) {
+        next.vehicle = next.vehicle || 'Select a vehicle type';
+        ok = false;
+      }
     }
-
-    if (email && !validateEmail(email)) {
-      newErrors.email = 'Please enter a valid email address';
-      isValid = false;
+    if (step === 2) {
+      if (!licenseImage || !aadharImage) {
+        next.documents = 'Both License and Aadhar are required';
+        ok = false;
+      }
     }
-
-    if (!validatePassword(password)) {
-      newErrors.password = 'Password must be at least 6 characters';
-      isValid = false;
-    }
-
-    if (password !== confirmPassword) {
-      newErrors.confirmPassword = 'Passwords do not match';
-      isValid = false;
-    }
-
-    if (!licenseImage || !aadharImage) {
-      newErrors.documents = 'Both License and Aadhar Card are required';
-      isValid = false;
-    }
-
-    setErrors(newErrors);
-    return isValid;
+    setErrors(next);
+    return ok;
   };
 
-  const handleRegister = async () => {
-    if (!validateForm()) return;
+  const handleNext = () => {
+    if (!validateStep()) return;
+    if (step < STEPS.length - 1) setStep((s) => s + 1);
+    else handleSubmit();
+  };
 
+  const handleSubmit = async () => {
+    if (!validateStep() || !licenseImage || !aadharImage) return;
     try {
       clearError();
-      await register(
-        name,
-        phone,
-        email,
-        password,
-        vehicleNumber,
-        vehicleType,
-        licenseImage || undefined,
-        aadharImage || undefined
-      );
+      await completeRegistration({
+        name: name.trim(),
+        email: email.trim() || undefined,
+        gender: gender || undefined,
+        vehicle_number: vehicleNumber.trim().toUpperCase(),
+        vehicle_type: vehicleType,
+        license_document: licenseImage,
+        aadhar_document: aadharImage,
+      });
       Alert.alert(
-        'Registration Submitted',
-        'Your account has been created. It will be activated after admin verifies your documents.',
-        [{ text: 'OK', onPress: () => router.replace('/login') }]
+        'Submitted for approval',
+        'Your captain profile is ready. An admin will verify your documents before you can go online.',
+        [
+          {
+            text: 'OK',
+            onPress: async () => {
+              await logout();
+              router.replace('/(auth)/login');
+            },
+          },
+        ]
       );
     } catch (err: any) {
-      const detail =
-        err?.response?.data?.detail ||
-        useAuthStore.getState().error ||
-        'Could not submit registration. Check your connection and try again.';
-      Alert.alert('Registration Failed', String(detail));
+      Alert.alert(
+        'Could not submit',
+        String(err?.response?.data?.detail || error || 'Please try again')
+      );
     }
   };
 
@@ -205,161 +171,139 @@ export default function RegisterScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.keyboardView}
       >
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-        >
+        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           <View style={styles.header}>
-            <View style={styles.logoContainer}>
-              <Ionicons name="person-add" size={48} color={Colors.primary} />
+            <Text style={styles.title}>Captain signup</Text>
+            <Text style={styles.subtitle}>Step {step + 1} of {STEPS.length} · {STEPS[step]}</Text>
+            <View style={styles.progressRow}>
+              {STEPS.map((label, i) => (
+                <View key={label} style={[styles.progressDot, i <= step && styles.progressDotActive]} />
+              ))}
             </View>
-            <Text style={styles.title}>Join as Driver</Text>
-            <Text style={styles.subtitle}>Start your journey with JK Taxi</Text>
           </View>
 
           <Card elevated style={styles.formCard}>
-            <Input
-              label="Full Name"
-              placeholder="Enter your full name"
-              value={name}
-              onChangeText={setName}
-              icon="person-outline"
-              error={errors.name}
-            />
+            {step === 0 && (
+              <>
+                <Input
+                  label="Full name"
+                  placeholder="As on your license"
+                  value={name}
+                  onChangeText={setName}
+                  icon="person-outline"
+                  error={errors.name}
+                />
+                <Input
+                  label="Email (optional)"
+                  placeholder="you@email.com"
+                  value={email}
+                  onChangeText={setEmail}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  icon="mail-outline"
+                  error={errors.email}
+                />
+                <Text style={styles.chipLabel}>Gender (optional)</Text>
+                <View style={styles.chipRow}>
+                  {['male', 'female', 'other'].map((g) => (
+                    <TouchableOpacity
+                      key={g}
+                      style={[styles.chip, gender === g && styles.chipActive]}
+                      onPress={() => setGender(g)}
+                    >
+                      <Text style={[styles.chipText, gender === g && styles.chipTextActive]}>
+                        {g.charAt(0).toUpperCase() + g.slice(1)}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </>
+            )}
 
-            <Input
-              label="Phone Number"
-              placeholder="Enter your phone number"
-              value={phone}
-              onChangeText={setPhone}
-              keyboardType="phone-pad"
-              maxLength={10}
-              icon="call-outline"
-              error={errors.phone}
-            />
+            {step === 1 && (
+              <>
+                <Input
+                  label="Vehicle number"
+                  placeholder="e.g. TN01AB1234"
+                  value={vehicleNumber}
+                  onChangeText={setVehicleNumber}
+                  autoCapitalize="characters"
+                  icon="car-outline"
+                  error={errors.vehicle}
+                />
+                <Text style={styles.chipLabel}>Vehicle type</Text>
+                <View style={styles.chipRow}>
+                  {VEHICLE_TYPES.map((t) => (
+                    <TouchableOpacity
+                      key={t}
+                      style={[styles.chip, vehicleType === t && styles.chipActive]}
+                      onPress={() => setVehicleType(t)}
+                    >
+                      <Text style={[styles.chipText, vehicleType === t && styles.chipTextActive]}>{t}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </>
+            )}
 
-            <Input
-              label="Email"
-              placeholder="Enter your email"
-              value={email}
-              onChangeText={setEmail}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              icon="mail-outline"
-              error={errors.email}
-            />
+            {step === 2 && (
+              <>
+                <Text style={styles.docTitle}>Upload KYC documents</Text>
+                <Text style={styles.docSub}>Clear photos help us approve you faster</Text>
 
-            <Input
-              label="Vehicle Number"
-              placeholder="e.g., KA01AB1234"
-              value={vehicleNumber}
-              onChangeText={setVehicleNumber}
-              autoCapitalize="characters"
-              icon="car-outline"
-            />
-
-            <Input
-              label="Vehicle Type"
-              placeholder="e.g., Sedan, Hatchback, SUV"
-              value={vehicleType}
-              onChangeText={setVehicleType}
-              icon="car-sport-outline"
-            />
-
-            {/* Document Upload Section */}
-            <View style={styles.docSection}>
-              <Text style={styles.docSectionTitle}>Documents</Text>
-              <Text style={styles.docSectionSubtitle}>
-                Upload clear photos of your documents for verification
-              </Text>
-
-              {/* License Upload */}
-              <TouchableOpacity
-                style={[styles.uploadBox, licenseImage && styles.uploadBoxDone]}
-                onPress={() => showImageOptions('license')}
-              >
-                {licenseImage ? (
-                  <View style={styles.uploadedContainer}>
-                    <Image source={{ uri: licenseImage }} style={styles.uploadedImage} />
-                    <View style={styles.uploadedBadge}>
-                      <Ionicons name="checkmark-circle" size={20} color="#10B981" />
+                <TouchableOpacity
+                  style={[styles.uploadBox, licenseImage && styles.uploadBoxDone]}
+                  onPress={() => showImageOptions('license')}
+                >
+                  {licenseImage ? (
+                    <View style={styles.uploadedContainer}>
+                      <Image source={{ uri: licenseImage }} style={styles.uploadedImage} />
                       <Text style={styles.uploadedText}>License uploaded</Text>
                     </View>
-                  </View>
-                ) : (
-                  <View style={styles.uploadPlaceholder}>
-                    <Ionicons name="card-outline" size={32} color="#666" />
-                    <Text style={styles.uploadLabel}>Driving License</Text>
-                    <Text style={styles.uploadHint}>Tap to upload</Text>
-                  </View>
-                )}
-              </TouchableOpacity>
+                  ) : (
+                    <View style={styles.uploadPlaceholder}>
+                      <Ionicons name="card-outline" size={32} color="#666" />
+                      <Text style={styles.uploadLabel}>Driving License</Text>
+                      <Text style={styles.uploadHint}>Tap to upload</Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
 
-              {/* Aadhar Upload */}
-              <TouchableOpacity
-                style={[styles.uploadBox, aadharImage && styles.uploadBoxDone]}
-                onPress={() => showImageOptions('aadhar')}
-              >
-                {aadharImage ? (
-                  <View style={styles.uploadedContainer}>
-                    <Image source={{ uri: aadharImage }} style={styles.uploadedImage} />
-                    <View style={styles.uploadedBadge}>
-                      <Ionicons name="checkmark-circle" size={20} color="#10B981" />
+                <TouchableOpacity
+                  style={[styles.uploadBox, aadharImage && styles.uploadBoxDone]}
+                  onPress={() => showImageOptions('aadhar')}
+                >
+                  {aadharImage ? (
+                    <View style={styles.uploadedContainer}>
+                      <Image source={{ uri: aadharImage }} style={styles.uploadedImage} />
                       <Text style={styles.uploadedText}>Aadhar uploaded</Text>
                     </View>
-                  </View>
-                ) : (
-                  <View style={styles.uploadPlaceholder}>
-                    <Ionicons name="id-card-outline" size={32} color="#666" />
-                    <Text style={styles.uploadLabel}>Aadhar Card</Text>
-                    <Text style={styles.uploadHint}>Tap to upload</Text>
-                  </View>
-                )}
-              </TouchableOpacity>
+                  ) : (
+                    <View style={styles.uploadPlaceholder}>
+                      <Ionicons name="id-card-outline" size={32} color="#666" />
+                      <Text style={styles.uploadLabel}>Aadhar Card</Text>
+                      <Text style={styles.uploadHint}>Tap to upload</Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+                {errors.documents ? <Text style={styles.docError}>{errors.documents}</Text> : null}
+              </>
+            )}
 
-              {errors.documents ? (
-                <Text style={styles.docError}>{errors.documents}</Text>
-              ) : null}
+            <View style={styles.navRow}>
+              {step > 0 ? (
+                <Button title="Back" variant="ghost" onPress={() => setStep((s) => s - 1)} style={styles.navBtn} />
+              ) : (
+                <View style={styles.navBtn} />
+              )}
+              <Button
+                title={step === STEPS.length - 1 ? 'Submit for approval' : 'Continue'}
+                onPress={handleNext}
+                loading={isLoading}
+                style={styles.navBtnPrimary}
+              />
             </View>
-
-            <Input
-              label="Password"
-              placeholder="Create a password"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-              icon="lock-closed-outline"
-              error={errors.password}
-            />
-
-            <Input
-              label="Confirm Password"
-              placeholder="Confirm your password"
-              value={confirmPassword}
-              onChangeText={setConfirmPassword}
-              secureTextEntry
-              icon="lock-closed-outline"
-              error={errors.confirmPassword}
-            />
-
-            <Button
-              title="Sign Up"
-              onPress={handleRegister}
-              loading={isLoading}
-              fullWidth
-              style={styles.registerButton}
-            />
           </Card>
-
-          <View style={styles.footer}>
-            <Text style={styles.footerText}>Already have an account?</Text>
-            <Button
-              title="Login"
-              variant="ghost"
-              size="small"
-              onPress={() => router.back()}
-            />
-          </View>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -367,63 +311,76 @@ export default function RegisterScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.background,
-  },
-  keyboardView: {
-    flex: 1,
-  },
-  scrollContent: {
-    flexGrow: 1,
-    padding: Spacing.lg,
-  },
-  header: {
-    alignItems: 'center',
-    marginTop: Spacing.lg,
-    marginBottom: Spacing.xl,
-  },
-  logoContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: Colors.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: Spacing.md,
-  },
-  title: {
-    fontSize: FontSizes.xxxl,
+  container: { flex: 1, backgroundColor: Colors.background },
+  keyboardView: { flex: 1 },
+  scrollContent: { flexGrow: 1, padding: Spacing.lg },
+  gate: { flex: 1, justifyContent: 'center', padding: Spacing.xl },
+  gateTitle: {
+    fontSize: FontSizes.xl,
     fontWeight: FontWeights.bold,
     color: Colors.text,
-    marginBottom: Spacing.xs,
+    marginBottom: Spacing.sm,
+    textAlign: 'center',
+  },
+  gateSub: {
+    fontSize: FontSizes.md,
+    color: Colors.textSecondary,
+    textAlign: 'center',
+    marginBottom: Spacing.lg,
+    lineHeight: 22,
+  },
+  header: { marginTop: Spacing.md, marginBottom: Spacing.lg },
+  title: {
+    fontSize: FontSizes.xxl,
+    fontWeight: FontWeights.bold,
+    color: Colors.text,
   },
   subtitle: {
     fontSize: FontSizes.md,
     color: Colors.textSecondary,
-    textAlign: 'center',
+    marginTop: 4,
   },
-  formCard: {
-    marginBottom: Spacing.lg,
+  progressRow: { flexDirection: 'row', gap: 8, marginTop: Spacing.md },
+  progressDot: {
+    flex: 1,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#E5E7EB',
   },
-  registerButton: {
-    marginTop: Spacing.md,
+  progressDotActive: { backgroundColor: Colors.primary },
+  formCard: { marginBottom: Spacing.lg },
+  chipLabel: {
+    fontSize: FontSizes.sm,
+    fontWeight: FontWeights.semibold,
+    color: Colors.textSecondary,
+    marginBottom: 8,
+    marginTop: 4,
   },
-  // Document upload section
-  docSection: {
-    marginTop: Spacing.md,
-    marginBottom: Spacing.md,
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: Spacing.md },
+  chip: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    backgroundColor: '#FAFAFA',
   },
-  docSectionTitle: {
+  chipActive: {
+    borderColor: Colors.primary,
+    backgroundColor: '#F5F3FF',
+  },
+  chipText: { fontSize: FontSizes.sm, color: '#555', fontWeight: '600' },
+  chipTextActive: { color: Colors.primary },
+  docTitle: {
     fontSize: FontSizes.lg,
     fontWeight: FontWeights.bold,
     color: Colors.text,
-    marginBottom: 4,
   },
-  docSectionSubtitle: {
+  docSub: {
     fontSize: FontSizes.sm,
     color: Colors.textSecondary,
     marginBottom: Spacing.md,
+    marginTop: 4,
   },
   uploadBox: {
     borderWidth: 2,
@@ -439,53 +396,28 @@ const styles = StyleSheet.create({
     borderStyle: 'solid',
     backgroundColor: '#F0FDF4',
   },
-  uploadPlaceholder: {
-    alignItems: 'center',
-    paddingVertical: Spacing.md,
-  },
+  uploadPlaceholder: { alignItems: 'center', paddingVertical: Spacing.md },
   uploadLabel: {
     fontSize: FontSizes.md,
     fontWeight: FontWeights.semibold,
     color: '#333',
     marginTop: Spacing.sm,
   },
-  uploadHint: {
-    fontSize: FontSizes.sm,
-    color: '#999',
-    marginTop: 4,
-  },
-  uploadedContainer: {
-    alignItems: 'center',
-  },
+  uploadHint: { fontSize: FontSizes.sm, color: '#999', marginTop: 4 },
+  uploadedContainer: { alignItems: 'center' },
   uploadedImage: {
     width: '100%',
     height: 120,
     borderRadius: BorderRadius.sm,
     marginBottom: Spacing.sm,
   },
-  uploadedBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
   uploadedText: {
     fontSize: FontSizes.sm,
     fontWeight: FontWeights.semibold,
     color: '#10B981',
   },
-  docError: {
-    fontSize: FontSizes.sm,
-    color: '#EF4444',
-    marginTop: -Spacing.sm,
-  },
-  footer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: Spacing.lg,
-  },
-  footerText: {
-    fontSize: FontSizes.md,
-    color: Colors.textSecondary,
-  },
+  docError: { fontSize: FontSizes.sm, color: '#EF4444', marginBottom: Spacing.sm },
+  navRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: Spacing.sm },
+  navBtn: { flex: 1 },
+  navBtnPrimary: { flex: 2 },
 });
