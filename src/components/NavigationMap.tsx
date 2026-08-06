@@ -37,8 +37,9 @@ export const NavigationMap: React.FC<NavigationMapProps> = ({
   const fetchingRef = useRef(false);
   const lastRerouteAtRef = useRef(0);
   const lastDestRef = useRef(`${destinationLocation.latitude},${destinationLocation.longitude}`);
+  const framedDestRef = useRef('');
 
-  const fetchRoute = async () => {
+  const fetchRoute = async (shouldFrame = false) => {
     if (fetchingRef.current) return;
     fetchingRef.current = true;
     try {
@@ -53,12 +54,16 @@ export const NavigationMap: React.FC<NavigationMapProps> = ({
         setFullRoute(coords);
         onRouteUpdate?.(coords, route.distance / 1000, route.duration / 60);
 
-        if (cameraRef.current) {
-          const lngs = coords.map((c) => c[0]);
-          const lats = coords.map((c) => c[1]);
-          const ne = [Math.max(...lngs), Math.max(...lats)];
-          const sw = [Math.min(...lngs), Math.min(...lats)];
-          cameraRef.current.fitBounds(ne, sw, [150, 60, 450, 60], 1500);
+        const destKey = `${destinationLocation.latitude},${destinationLocation.longitude}`;
+        if (shouldFrame || framedDestRef.current !== destKey) {
+          framedDestRef.current = destKey;
+          if (cameraRef.current && coords.length >= 2) {
+            const lngs = coords.map((c) => c[0]);
+            const lats = coords.map((c) => c[1]);
+            const ne = [Math.max(...lngs), Math.max(...lats)];
+            const sw = [Math.min(...lngs), Math.min(...lats)];
+            cameraRef.current.fitBounds(ne, sw, [150, 60, 450, 60], 1500);
+          }
         }
       }
     } catch (error) {
@@ -68,12 +73,12 @@ export const NavigationMap: React.FC<NavigationMapProps> = ({
     }
   };
 
-  // Fresh route when destination changes
+  // Fresh route when destination changes — frame once for this leg
   useEffect(() => {
     const key = `${destinationLocation.latitude},${destinationLocation.longitude}`;
     if (key !== lastDestRef.current || !fullRoute) {
       lastDestRef.current = key;
-      fetchRoute();
+      fetchRoute(true);
     }
   }, [destinationLocation.latitude, destinationLocation.longitude]);
 
@@ -89,13 +94,13 @@ export const NavigationMap: React.FC<NavigationMapProps> = ({
     [fullRoute, driverLocation.latitude, driverLocation.longitude]
   );
 
-  // Off-route → re-fetch
+  // Off-route → re-fetch without reframing
   useEffect(() => {
     if (!progress?.offRoute) return;
     const now = Date.now();
     if (now - lastRerouteAtRef.current < 8000) return;
     lastRerouteAtRef.current = now;
-    fetchRoute();
+    fetchRoute(false);
   }, [progress?.offRoute, driverLocation.latitude, driverLocation.longitude]);
 
   const travelled = progress && progress.travelled.length >= 2 ? progress.travelled : null;

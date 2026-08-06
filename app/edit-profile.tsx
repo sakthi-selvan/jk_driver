@@ -8,10 +8,12 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
+  TouchableOpacity,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuthStore } from '../src/store/authStore';
 import { authApi } from '../src/api/auth';
 import { Button } from '../src/components/common/Button';
@@ -19,10 +21,13 @@ import { Card } from '../src/components/common/Card';
 import { Colors, Spacing, FontSizes, FontWeights, BorderRadius } from '../src/constants/theme';
 import { BottomNav } from '../src/components/navigation/BottomNav';
 
+const GENDERS = ['Male', 'Female', 'Other', 'Prefer not to say'] as const;
+
 export default function EditProfileScreen() {
   const { driver } = useAuthStore();
   const [name, setName] = useState(driver?.name || '');
   const [email, setEmail] = useState(driver?.email || '');
+  const [gender, setGender] = useState(driver?.gender || '');
   const [vehicleNumber, setVehicleNumber] = useState(driver?.vehicle_number || '');
   const [vehicleType, setVehicleType] = useState(driver?.vehicle_type || '');
   const [isLoading, setIsLoading] = useState(false);
@@ -43,28 +48,25 @@ export default function EditProfileScreen() {
       const updatedDriver = await authApi.updateProfile({
         name: name.trim(),
         email: email.trim() || undefined,
+        gender: gender || undefined,
         vehicle_number: vehicleNumber.trim().toUpperCase(),
         vehicle_type: vehicleType.trim(),
       });
 
-      // Update local storage
       const { driver: currentDriver } = useAuthStore.getState();
       const updatedDriverData = { ...currentDriver, ...updatedDriver };
-
-      // Refresh the auth store
+      try {
+        await AsyncStorage.setItem('driver', JSON.stringify(updatedDriverData));
+      } catch {
+        /* memory store still updated */
+      }
       useAuthStore.setState({ driver: updatedDriverData });
 
       Alert.alert('Success', 'Profile updated successfully', [
-        {
-          text: 'OK',
-          onPress: () => router.back(),
-        },
+        { text: 'OK', onPress: () => router.back() },
       ]);
     } catch (error: any) {
-      Alert.alert(
-        'Error',
-        error.response?.data?.detail || 'Failed to update profile'
-      );
+      Alert.alert('Error', error.response?.data?.detail || 'Failed to update profile');
     } finally {
       setIsLoading(false);
     }
@@ -76,8 +78,7 @@ export default function EditProfileScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.keyboardView}
       >
-        <ScrollView contentContainerStyle={styles.scrollContent}>
-          {/* Header */}
+        <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
           <View style={styles.header}>
             <Button
               title=""
@@ -90,14 +91,12 @@ export default function EditProfileScreen() {
             <View style={styles.backButton} />
           </View>
 
-          {/* Profile Icon */}
           <View style={styles.avatarSection}>
             <View style={styles.avatarContainer}>
               <Ionicons name="person" size={50} color={Colors.primary} />
             </View>
           </View>
 
-          {/* Form */}
           <Card elevated style={styles.formCard}>
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Name *</Text>
@@ -135,16 +134,36 @@ export default function EditProfileScreen() {
               />
             </View>
 
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Gender</Text>
+              <Text style={styles.helperText}>
+                Required for women-only trip matching. Choose Female to receive those offers.
+              </Text>
+              <View style={styles.genderRow}>
+                {GENDERS.map((g) => (
+                  <TouchableOpacity
+                    key={g}
+                    style={[styles.genderChip, gender === g && styles.genderChipActive]}
+                    onPress={() => setGender(g)}
+                    activeOpacity={0.85}
+                  >
+                    <Text
+                      style={[styles.genderChipText, gender === g && styles.genderChipTextActive]}
+                    >
+                      {g}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
             <View style={styles.divider} />
 
-            {/* Vehicle Information Section */}
             <View style={styles.sectionHeader}>
               <Ionicons name="car-sport" size={20} color={Colors.primary} />
               <Text style={styles.sectionTitle}>Vehicle Information *</Text>
             </View>
-            <Text style={styles.sectionDescription}>
-              Required for ride assignments
-            </Text>
+            <Text style={styles.sectionDescription}>Required for ride assignments</Text>
 
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Vehicle Number *</Text>
@@ -157,9 +176,6 @@ export default function EditProfileScreen() {
                 autoCapitalize="characters"
                 maxLength={15}
               />
-              <Text style={styles.helperText}>
-                Enter vehicle registration number
-              </Text>
             </View>
 
             <View style={styles.inputGroup}>
@@ -168,17 +184,13 @@ export default function EditProfileScreen() {
                 style={styles.input}
                 value={vehicleType}
                 onChangeText={setVehicleType}
-                placeholder="e.g., Sedan, SUV, Hatchback"
+                placeholder="e.g., Sedan, SUV, Bike, Auto"
                 placeholderTextColor={Colors.textMuted}
                 autoCapitalize="words"
               />
-              <Text style={styles.helperText}>
-                Specify your vehicle type
-              </Text>
             </View>
           </Card>
 
-          {/* Save Button */}
           <Button
             title="Save Changes"
             onPress={handleSave}
@@ -194,34 +206,22 @@ export default function EditProfileScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.background,
-  },
-  keyboardView: {
-    flex: 1,
-  },
-  scrollContent: {
-    padding: Spacing.lg,
-  },
+  container: { flex: 1, backgroundColor: Colors.background },
+  keyboardView: { flex: 1 },
+  scrollContent: { padding: Spacing.lg },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: Spacing.xl,
   },
-  backButton: {
-    width: 40,
-  },
+  backButton: { width: 40 },
   headerTitle: {
     fontSize: FontSizes.xl,
     fontWeight: FontWeights.bold,
     color: Colors.text,
   },
-  avatarSection: {
-    alignItems: 'center',
-    marginBottom: Spacing.xl,
-  },
+  avatarSection: { alignItems: 'center', marginBottom: Spacing.xl },
   avatarContainer: {
     width: 100,
     height: 100,
@@ -232,12 +232,8 @@ const styles = StyleSheet.create({
     borderWidth: 3,
     borderColor: Colors.primary,
   },
-  formCard: {
-    marginBottom: Spacing.lg,
-  },
-  inputGroup: {
-    marginBottom: Spacing.lg,
-  },
+  formCard: { marginBottom: Spacing.lg },
+  inputGroup: { marginBottom: Spacing.lg },
   label: {
     fontSize: FontSizes.sm,
     fontWeight: FontWeights.medium,
@@ -253,15 +249,32 @@ const styles = StyleSheet.create({
     fontSize: FontSizes.md,
     color: Colors.text,
   },
-  disabledInput: {
-    opacity: 0.5,
-    backgroundColor: Colors.card,
-  },
+  disabledInput: { opacity: 0.5, backgroundColor: Colors.card },
   helperText: {
     fontSize: FontSizes.xs,
     color: Colors.textMuted,
     marginTop: Spacing.xs,
+    marginBottom: Spacing.sm,
   },
+  genderRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  genderChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: BorderRadius.full,
+    borderWidth: 1.5,
+    borderColor: '#E5E7EB',
+    backgroundColor: '#F9FAFB',
+  },
+  genderChipActive: {
+    borderColor: Colors.primary,
+    backgroundColor: Colors.primary + '18',
+  },
+  genderChipText: {
+    fontSize: FontSizes.sm,
+    fontWeight: FontWeights.semibold,
+    color: Colors.textSecondary,
+  },
+  genderChipTextActive: { color: Colors.primary },
   divider: {
     height: 1,
     backgroundColor: Colors.border,
@@ -283,7 +296,5 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     marginBottom: Spacing.lg,
   },
-  saveButton: {
-    marginBottom: Spacing.xl,
-  },
+  saveButton: { marginBottom: Spacing.xl },
 });

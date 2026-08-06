@@ -17,13 +17,23 @@ const TABS: Array<{
   { key: 'home', label: 'Go', icon: 'navigate-outline', iconActive: 'navigate', href: '/' },
   { key: 'rides', label: 'Rides', icon: 'list-outline', iconActive: 'list', href: '/rides-enhanced' },
   { key: 'wallet', label: 'Wallet', icon: 'wallet-outline', iconActive: 'wallet', href: '/wallet' },
-  { key: 'profile', label: 'Profile', icon: 'person-outline', iconActive: 'person', href: '/edit-profile' },
+  { key: 'profile', label: 'Profile', icon: 'person-outline', iconActive: 'person', href: '/profile' },
 ];
 
 function activeKey(pathname: string): TabKey {
   if (pathname.includes('rides')) return 'rides';
   if (pathname.includes('wallet')) return 'wallet';
-  if (pathname.includes('edit-profile') || pathname.includes('profile')) return 'profile';
+  if (
+    pathname.includes('edit-profile') ||
+    pathname.includes('profile') ||
+    pathname.includes('notifications') ||
+    pathname.includes('privacy') ||
+    pathname.includes('help-center') ||
+    pathname.includes('contact-support') ||
+    pathname.includes('terms')
+  ) {
+    return 'profile';
+  }
   return 'home';
 }
 

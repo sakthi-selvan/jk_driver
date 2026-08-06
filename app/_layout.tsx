@@ -41,7 +41,13 @@ export default function RootLayout() {
       >
         <Stack.Screen name="(auth)" />
         <Stack.Screen name="index" />
+        <Stack.Screen name="profile" />
         <Stack.Screen name="edit-profile" />
+        <Stack.Screen name="notifications" />
+        <Stack.Screen name="privacy" />
+        <Stack.Screen name="help-center" />
+        <Stack.Screen name="contact-support" />
+        <Stack.Screen name="terms" />
         <Stack.Screen name="rides-enhanced" />
         <Stack.Screen name="wallet" />
         <Stack.Screen name="ride-details" />

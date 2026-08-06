@@ -4,6 +4,7 @@ import Mapbox from '@rnmapbox/maps';
 import { MAPBOX_ACCESS_TOKEN, MAP_STYLES, MAP_PADDING, ANIMATION_DURATION } from '../../config/mapbox-config';
 import { Spacing, FontSizes, FontWeights, BorderRadius } from '../../constants/theme';
 import { RouteProgressLayers } from './RouteProgressLayers';
+import { VehicleMarker, normalizeFleetCategory } from './VehicleMarker';
 import {
   estimateRemainingMinutes,
   remainingDistanceMeters,
@@ -17,6 +18,7 @@ interface Location {
   latitude: number;
   longitude: number;
   address?: string;
+  heading?: number | null;
 }
 
 interface DriverMapViewProps {
@@ -24,6 +26,7 @@ interface DriverMapViewProps {
   dropoff: Location;
   driverLocation?: Location;
   showRoute?: boolean;
+  vehicleType?: string | null;
   onRouteReady?: (distance: number, duration: number) => void;
 }
 
@@ -34,46 +37,46 @@ interface RouteData {
 }
 
 /**
- * DriverMapView - Map with Google Maps–style travelled/remaining progress.
+ * DriverMapView — road route with once-per-leg camera framing and top-view vehicle marker.
  */
 export const DriverMapView: React.FC<DriverMapViewProps> = ({
   pickup,
   dropoff,
   driverLocation,
   showRoute = true,
+  vehicleType,
   onRouteReady,
 }) => {
   const cameraRef = useRef<Mapbox.Camera>(null);
   const [routeData, setRouteData] = useState<RouteData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const lastFetchRef = useRef(0);
+  const framedLegRef = useRef('');
+  const category = normalizeFleetCategory(vehicleType);
 
   useEffect(() => {
-    if (showRoute) {
-      fetchRoute(false);
-    }
+    framedLegRef.current = '';
+    setRouteData(null);
+    if (showRoute) fetchRoute(false, true);
   }, [pickup.latitude, pickup.longitude, dropoff.latitude, dropoff.longitude, showRoute]);
 
-  useEffect(() => {
-    if (routeData && cameraRef.current) {
-      const coordinates = [...routeData.coordinates];
-      if (driverLocation) {
-        coordinates.push([driverLocation.longitude, driverLocation.latitude]);
-      }
-
-      const lngs = coordinates.map((c) => c[0]);
-      const lats = coordinates.map((c) => c[1]);
-
-      cameraRef.current.fitBounds(
-        [Math.max(...lngs), Math.max(...lats)],
-        [Math.min(...lngs), Math.min(...lats)],
-        [MAP_PADDING.top, MAP_PADDING.right, MAP_PADDING.bottom, MAP_PADDING.left],
-        ANIMATION_DURATION
-      );
+  const frameRoute = (coords: LngLat[], includeDriver?: Location) => {
+    if (!cameraRef.current || coords.length < 2) return;
+    const points = [...coords];
+    if (includeDriver) {
+      points.push([includeDriver.longitude, includeDriver.latitude]);
     }
-  }, [routeData]);
+    const lngs = points.map((c) => c[0]);
+    const lats = points.map((c) => c[1]);
+    cameraRef.current.fitBounds(
+      [Math.max(...lngs), Math.max(...lats)],
+      [Math.min(...lngs), Math.min(...lats)],
+      [MAP_PADDING.top, MAP_PADDING.right, MAP_PADDING.bottom, MAP_PADDING.left],
+      ANIMATION_DURATION
+    );
+  };
 
-  const fetchRoute = async (fromDriver = false) => {
+  const fetchRoute = async (fromDriver = false, shouldFrame = false) => {
     setIsLoading(true);
     try {
       const origin = fromDriver && driverLocation ? driverLocation : pickup;
@@ -93,9 +96,15 @@ export const DriverMapView: React.FC<DriverMapViewProps> = ({
         });
         lastFetchRef.current = Date.now();
 
-        if (onRouteReady) {
-          onRouteReady(route.distance / 1000, route.duration / 60);
+        if (shouldFrame) {
+          const legKey = `${pickup.latitude},${pickup.longitude}->${dropoff.latitude},${dropoff.longitude}`;
+          if (framedLegRef.current !== legKey) {
+            framedLegRef.current = legKey;
+            frameRoute(coordinates, driverLocation);
+          }
         }
+
+        onRouteReady?.(route.distance / 1000, route.duration / 60);
       }
     } catch (error) {
       console.error('Error fetching route:', error);
@@ -113,8 +122,18 @@ export const DriverMapView: React.FC<DriverMapViewProps> = ({
     if (!progress?.offRoute || !driverLocation) return;
     if (Date.now() - lastFetchRef.current < 8000) return;
     lastFetchRef.current = Date.now();
-    fetchRoute(true);
+    // Rebuild polyline without reframing the camera
+    fetchRoute(true, false);
   }, [progress?.offRoute, driverLocation?.latitude, driverLocation?.longitude]);
+
+  // First frame when route arrives if not yet framed
+  useEffect(() => {
+    if (!routeData) return;
+    const legKey = `${pickup.latitude},${pickup.longitude}->${dropoff.latitude},${dropoff.longitude}`;
+    if (framedLegRef.current === legKey) return;
+    framedLegRef.current = legKey;
+    frameRoute(routeData.coordinates, driverLocation);
+  }, [routeData]);
 
   const travelled =
     progress && progress.travelled.length >= 2 ? progress.travelled : null;
@@ -128,11 +147,12 @@ export const DriverMapView: React.FC<DriverMapViewProps> = ({
     : routeData
       ? routeData.distance / 1000
       : 0;
-  const remMin = progress && routeData
-    ? estimateRemainingMinutes(routeData.duration / 60, progress.fraction)
-    : routeData
-      ? routeData.duration / 60
-      : 0;
+  const remMin =
+    progress && routeData
+      ? estimateRemainingMinutes(routeData.duration / 60, progress.fraction)
+      : routeData
+        ? routeData.duration / 60
+        : 0;
 
   return (
     <View style={styles.container}>
@@ -140,11 +160,10 @@ export const DriverMapView: React.FC<DriverMapViewProps> = ({
         style={styles.map}
         styleURL={MAP_STYLES.NAVIGATION_DAY}
         compassEnabled
-        attributionEnabled={true}
+        attributionEnabled
         logoEnabled={false}
       >
         <Mapbox.Camera ref={cameraRef} animationDuration={ANIMATION_DURATION} />
-
         <Mapbox.UserLocation visible showsUserHeadingIndicator androidRenderMode="gps" />
 
         <Mapbox.PointAnnotation
@@ -168,22 +187,22 @@ export const DriverMapView: React.FC<DriverMapViewProps> = ({
         </Mapbox.PointAnnotation>
 
         {driverLocation && (
-          <Mapbox.PointAnnotation
-            id="driver"
+          <Mapbox.MarkerView
+            key="driver-self-marker"
+            id="driver-self"
             coordinate={[driverLocation.longitude, driverLocation.latitude]}
-            title="Your Location"
+            allowOverlap
+            anchor={{ x: 0.5, y: 0.5 }}
           >
-            <View style={[styles.marker, styles.driverMarker]}>
-              <Text style={styles.markerText}>🚗</Text>
-            </View>
-          </Mapbox.PointAnnotation>
+            <VehicleMarker
+              category={category}
+              size={40}
+              heading={driverLocation.heading ?? null}
+            />
+          </Mapbox.MarkerView>
         )}
 
-        <RouteProgressLayers
-          travelled={travelled}
-          remaining={remaining}
-          idPrefix="driver-map"
-        />
+        <RouteProgressLayers travelled={travelled} remaining={remaining} idPrefix="driver-map" />
       </Mapbox.MapView>
 
       {routeData && (
@@ -204,74 +223,44 @@ export const DriverMapView: React.FC<DriverMapViewProps> = ({
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  map: {
-    flex: 1,
-  },
+  container: { flex: 1 },
+  map: { flex: 1 },
   marker: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: 'center',
-    borderWidth: 3,
-    borderColor: '#FFFFFF',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 5,
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#FFF',
   },
-  pickupMarker: {
-    backgroundColor: '#0F9D58',
-  },
-  dropoffMarker: {
-    backgroundColor: '#EA4335',
-  },
-  driverMarker: {
-    backgroundColor: '#1A73E8',
-  },
-  markerText: {
-    color: '#FFFFFF',
-    fontSize: FontSizes.lg,
-    fontWeight: FontWeights.bold,
-  },
+  pickupMarker: { backgroundColor: '#22C55E' },
+  dropoffMarker: { backgroundColor: '#EF4444' },
+  markerText: { color: '#FFF', fontWeight: FontWeights.bold, fontSize: 12 },
   routeInfoContainer: {
     position: 'absolute',
     top: Spacing.md,
-    left: Spacing.md,
-    right: Spacing.md,
-    backgroundColor: 'rgba(255, 255, 255, 0.96)',
+    alignSelf: 'center',
+    backgroundColor: '#FFF',
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.sm,
-    borderRadius: BorderRadius.md,
-    borderWidth: 1,
-    borderColor: '#E8EAED',
+    borderRadius: BorderRadius.full,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.15,
-    shadowRadius: 4,
-    elevation: 5,
+    shadowRadius: 6,
+    elevation: 4,
   },
   routeInfoText: {
-    fontSize: FontSizes.md,
+    fontSize: FontSizes.sm,
     fontWeight: FontWeights.semibold,
-    color: '#1A73E8',
-    textAlign: 'center',
+    color: '#111',
   },
   loadingContainer: {
     position: 'absolute',
-    top: Spacing.md,
-    right: Spacing.md,
+    bottom: Spacing.lg,
+    alignSelf: 'center',
     backgroundColor: '#FFF',
     padding: Spacing.sm,
-    borderRadius: BorderRadius.md,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 3.84,
-    elevation: 5,
+    borderRadius: BorderRadius.full,
   },
 });

@@ -120,7 +120,7 @@ export const DriverDrawer: React.FC<DriverDrawerProps> = ({ isOpen, onClose, isO
               style={styles.menuItem}
               onPress={() => {
                 onClose();
-                router.push('/edit-profile');
+                router.push('/profile');
               }}
             >
               <View style={styles.menuItemIconContainer}>
@@ -148,7 +148,13 @@ export const DriverDrawer: React.FC<DriverDrawerProps> = ({ isOpen, onClose, isO
               <Ionicons name="chevron-forward" size={20} color="#999" />
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.menuItem}>
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => {
+                onClose();
+                router.push('/help-center');
+              }}
+            >
               <View style={styles.menuItemIconContainer}>
                 <Ionicons name="help-circle" size={24} color={Colors.primary} />
               </View>
@@ -156,7 +162,13 @@ export const DriverDrawer: React.FC<DriverDrawerProps> = ({ isOpen, onClose, isO
               <Ionicons name="chevron-forward" size={20} color="#999" />
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.menuItem}>
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => {
+                onClose();
+                router.push('/notifications');
+              }}
+            >
               <View style={styles.menuItemIconContainer}>
                 <Ionicons name="settings" size={24} color={Colors.primary} />
               </View>

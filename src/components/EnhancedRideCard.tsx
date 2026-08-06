@@ -35,7 +35,9 @@ export const EnhancedRideCard: React.FC<EnhancedRideCardProps> = ({
       mini: 'Mini',
       sedan: 'Sedan',
       suv: 'SUV',
-      premium: 'Premium',
+      premium: 'SUV',
+      auto: 'Auto',
+      bike: 'Bike',
     };
     return labels[category] || category;
   };

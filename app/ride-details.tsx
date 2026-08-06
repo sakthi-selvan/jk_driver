@@ -17,12 +17,14 @@ import { DriverMapView } from '../src/components/map/DriverMapView';
 import { Button } from '../src/components/common/Button';
 import { Card } from '../src/components/common/Card';
 import { driverEnhancedApi } from '../src/api/driver-enhanced';
+import { useAuthStore } from '../src/store/authStore';
 import { EnhancedRide } from '../src/types/enhanced';
 import { Colors, Spacing, FontSizes, FontWeights, BorderRadius } from '../src/constants/theme';
 
 export default function RideDetailsScreen() {
   const params = useLocalSearchParams();
   const rideId = params.id as string;
+  const driverVehicleType = useAuthStore((s) => s.driver?.vehicle_type);
 
   const [ride, setRide] = useState<EnhancedRide | null>(null);
   const [driverLocation, setDriverLocation] = useState<{ latitude: number; longitude: number } | null>(null);
@@ -186,6 +188,7 @@ export default function RideDetailsScreen() {
           pickup={pickupLoc}
           dropoff={dropoffLoc}
           driverLocation={driverLocation || undefined}
+          vehicleType={(ride as any).vehicle_category || (ride as any).vehicle_type || driverVehicleType}
           showRoute
         />
       </View>
