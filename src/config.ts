@@ -8,7 +8,7 @@ const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://api.jktaxitamilnadu.
 
 export const API_CONFIG = {
   BASE_URL: API_URL,
-  TIMEOUT: 30000,
+  TIMEOUT: 90000,
 };
 
 // Debug: Log the resolved API URL

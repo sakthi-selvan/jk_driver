@@ -67,11 +67,11 @@ export default function RegisterScreen() {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       allowsEditing: true,
-      quality: 0.7,
+      quality: 0.45,
       base64: true,
     });
 
-    if (!result.canceled && result.assets[0]) {
+    if (!result.canceled && result.assets[0]?.base64) {
       const base64 = `data:image/jpeg;base64,${result.assets[0].base64}`;
       if (type === 'license') {
         setLicenseImage(base64);
@@ -95,11 +95,11 @@ export default function RegisterScreen() {
 
     const result = await ImagePicker.launchCameraAsync({
       allowsEditing: true,
-      quality: 0.7,
+      quality: 0.45,
       base64: true,
     });
 
-    if (!result.canceled && result.assets[0]) {
+    if (!result.canceled && result.assets[0]?.base64) {
       const base64 = `data:image/jpeg;base64,${result.assets[0].base64}`;
       if (type === 'license') {
         setLicenseImage(base64);
@@ -175,14 +175,27 @@ export default function RegisterScreen() {
 
     try {
       clearError();
-      await register(name, phone, email, password, vehicleNumber, vehicleType, licenseImage || undefined, aadharImage || undefined);
+      await register(
+        name,
+        phone,
+        email,
+        password,
+        vehicleNumber,
+        vehicleType,
+        licenseImage || undefined,
+        aadharImage || undefined
+      );
       Alert.alert(
         'Registration Submitted',
         'Your account has been created. It will be activated after admin verifies your documents.',
         [{ text: 'OK', onPress: () => router.replace('/login') }]
       );
-    } catch (err) {
-      Alert.alert('Registration Failed', error || 'Please try again');
+    } catch (err: any) {
+      const detail =
+        err?.response?.data?.detail ||
+        useAuthStore.getState().error ||
+        'Could not submit registration. Check your connection and try again.';
+      Alert.alert('Registration Failed', String(detail));
     }
   };
 

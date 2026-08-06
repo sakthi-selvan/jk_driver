@@ -21,7 +21,22 @@ class ApiClient {
       async (config) => {
         console.log('🚗 [DRIVER API REQUEST]', config.method?.toUpperCase(), config.url);
         console.log('📍 [BASE URL]', config.baseURL);
-        console.log('📦 [DATA]', JSON.stringify(config.data));
+        try {
+          const raw = config.data;
+          if (raw && typeof raw === 'object') {
+            const safe = { ...raw } as Record<string, unknown>;
+            for (const key of ['license_document', 'aadhar_document', 'password']) {
+              if (typeof safe[key] === 'string' && String(safe[key]).length > 80) {
+                safe[key] = `[omitted ${String(safe[key]).length} chars]`;
+              }
+            }
+            console.log('📦 [DATA]', JSON.stringify(safe));
+          } else {
+            console.log('📦 [DATA]', raw);
+          }
+        } catch {
+          console.log('📦 [DATA]', '(unserializable)');
+        }
 
         try {
           const token = await AsyncStorage.getItem('access_token');
