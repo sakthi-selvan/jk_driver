@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   Alert,
 } from 'react-native';
+import { formatApiError } from '../utils/apiError';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Spacing, FontSizes, FontWeights, BorderRadius } from '../constants/theme';
 import { driverEnhancedApi } from '../api/driver-enhanced';
@@ -69,7 +70,7 @@ export const PaymentCollectionModal: React.FC<PaymentCollectionModalProps> = ({
       Alert.alert('Cash Collected', `₹${Math.round(fare)} recorded as cash payment.`);
       onComplete();
     } catch (error: any) {
-      Alert.alert('Error', error?.response?.data?.detail || 'Failed to record payment');
+      Alert.alert('Error', formatApiError(error, 'Failed to record payment'));
       setIsProcessing(false);
     }
   };

@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { formatApiError } from '../utils/apiError';
 import { ridesApi } from '../api/rides';
 import apiClient from '../api/client';
 
@@ -35,7 +36,7 @@ export const useStatusStore = create<StatusState>((set, get) => ({
       await ridesApi.updateStatus({ is_online: newStatus });
       set({ isOnline: newStatus, isUpdating: false });
     } catch (error: any) {
-      const errorMsg = error.response?.data?.detail || 'Failed to update status';
+      const errorMsg = formatApiError(error, 'Failed to update status');
       set({ error: errorMsg, isUpdating: false });
       throw error;
     }
@@ -47,7 +48,7 @@ export const useStatusStore = create<StatusState>((set, get) => ({
       await ridesApi.updateStatus({ is_online: status });
       set({ isOnline: status, isUpdating: false });
     } catch (error: any) {
-      const errorMsg = error.response?.data?.detail || 'Failed to update status';
+      const errorMsg = formatApiError(error, 'Failed to update status');
       set({ error: errorMsg, isUpdating: false });
       throw error;
     }

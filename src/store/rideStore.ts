@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { formatApiError } from '../utils/apiError';
 import { Ride, Earnings } from '../types';
 import { ridesApi } from '../api/rides';
 
@@ -35,7 +36,7 @@ export const useRideStore = create<RideState>((set, get) => ({
       const rides = await ridesApi.getAvailableRides();
       set({ availableRides: rides, isLoading: false });
     } catch (error: any) {
-      const errorMsg = error.response?.data?.detail || 'Failed to load available rides';
+      const errorMsg = formatApiError(error, 'Failed to load available rides');
       set({ error: errorMsg, isLoading: false, availableRides: [] });
     }
   },
@@ -50,7 +51,7 @@ export const useRideStore = create<RideState>((set, get) => ({
         isLoading: false,
       });
     } catch (error: any) {
-      const errorMsg = error.response?.data?.detail || 'Failed to accept ride';
+      const errorMsg = formatApiError(error, 'Failed to accept ride');
       set({ error: errorMsg, isLoading: false });
       throw error;
     }
@@ -63,7 +64,7 @@ export const useRideStore = create<RideState>((set, get) => ({
         availableRides: get().availableRides.filter((r) => r.id !== rideId),
       });
     } catch (error: any) {
-      const errorMsg = error.response?.data?.detail || 'Failed to reject ride';
+      const errorMsg = formatApiError(error, 'Failed to reject ride');
       set({ error: errorMsg });
     }
   },
@@ -74,7 +75,7 @@ export const useRideStore = create<RideState>((set, get) => ({
       const ride = await ridesApi.startRide(rideId);
       set({ activeRide: ride, isLoading: false });
     } catch (error: any) {
-      const errorMsg = error.response?.data?.detail || 'Failed to start ride';
+      const errorMsg = formatApiError(error, 'Failed to start ride');
       set({ error: errorMsg, isLoading: false });
       throw error;
     }
@@ -88,7 +89,7 @@ export const useRideStore = create<RideState>((set, get) => ({
       // Reload earnings after completing ride
       get().loadEarnings();
     } catch (error: any) {
-      const errorMsg = error.response?.data?.detail || 'Failed to complete ride';
+      const errorMsg = formatApiError(error, 'Failed to complete ride');
       set({ error: errorMsg, isLoading: false });
       throw error;
     }

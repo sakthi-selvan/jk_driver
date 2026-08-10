@@ -10,6 +10,7 @@ import {
   TouchableOpacity,
   Image,
 } from 'react-native';
+import { formatApiError } from '../../src/utils/apiError';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -169,7 +170,7 @@ export default function RegisterScreen() {
     } catch (err: any) {
       Alert.alert(
         'Could not submit',
-        String(err?.response?.data?.detail || error || 'Please try again')
+        formatApiError(err, 'Please try again')
       );
     }
   };

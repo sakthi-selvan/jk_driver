@@ -10,6 +10,7 @@ import {
   Platform,
   Dimensions,
 } from 'react-native';
+import { formatApiError } from '../src/utils/apiError';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -288,7 +289,7 @@ export default function HomeScreen() {
       if (e.response?.status === 409) {
         Alert.alert('Already Taken', 'This ride was accepted by another driver.');
       } else {
-        Alert.alert('Error', e.response?.data?.detail || 'Failed to accept ride');
+        Alert.alert('Error', formatApiError(e, 'Failed to accept ride'));
       }
       loadRides();
     }
@@ -351,7 +352,7 @@ export default function HomeScreen() {
       const ride = await driverEnhancedApi.startRide(activeRide.id);
       setActiveRide(ride);
     } catch (e: any) {
-      Alert.alert('Error', e.response?.data?.detail || 'Failed to start ride');
+      Alert.alert('Error', formatApiError(e, 'Failed to start ride'));
     }
   };
 
@@ -377,8 +378,7 @@ export default function HomeScreen() {
           await driverEnhancedApi.completeRide(activeRide.id);
           showPaymentCollection(activeRide.id, activeRide.fare);
         } catch (e: any) {
-          const detail = e.response?.data?.detail || 'Failed to complete';
-          Alert.alert('Cannot Complete', detail);
+          Alert.alert('Cannot Complete', formatApiError(e, 'Failed to complete'));
         }
       }},
     ]);
@@ -444,7 +444,7 @@ export default function HomeScreen() {
         Alert.alert('Ride Cancelled', 'The ride has been cancelled.');
         setTimeout(() => loadRides(), 500);
       } else {
-        Alert.alert('Error', e.response?.data?.detail || 'Failed to cancel ride');
+        Alert.alert('Error', formatApiError(e, 'Failed to cancel ride'));
         throw e;
       }
     }

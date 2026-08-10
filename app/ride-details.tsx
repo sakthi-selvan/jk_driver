@@ -9,6 +9,7 @@ import {
   Platform,
   Linking,
 } from 'react-native';
+import { formatApiError } from '../src/utils/apiError';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -120,7 +121,7 @@ export default function RideDetailsScreen() {
       setRide(updatedRide);
       Alert.alert('Ride Started! 🚗', 'Drive safely to the destination');
     } catch (error: any) {
-      Alert.alert('Error', error.response?.data?.detail || 'Failed to start ride');
+      Alert.alert('Error', formatApiError(error, 'Failed to start ride'));
     }
   };
 
@@ -141,7 +142,7 @@ export default function RideDetailsScreen() {
                 { text: 'OK', onPress: () => router.back() },
               ]);
             } catch (error: any) {
-              Alert.alert('Error', error.response?.data?.detail || 'Failed to complete ride');
+              Alert.alert('Error', formatApiError(error, 'Failed to complete ride'));
             }
           },
         },

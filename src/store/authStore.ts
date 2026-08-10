@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { formatApiError } from '../utils/apiError';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Driver } from '../types';
 import { authApi, DriverCompleteRegistrationData, DriverOTPAuthResponse } from '../api/auth';
@@ -60,7 +61,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       set({ otpSent: true, otpPhone: phone, isLoading: false });
     } catch (error: any) {
       set({
-        error: error.response?.data?.detail || 'Failed to send OTP',
+        error: formatApiError(error, 'Failed to send OTP'),
         isLoading: false,
       });
       throw error;
@@ -106,7 +107,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       return response;
     } catch (error: any) {
       set({
-        error: error.response?.data?.detail || 'Invalid OTP',
+        error: formatApiError(error, 'Invalid OTP'),
         isLoading: false,
       });
       throw error;
@@ -125,7 +126,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       });
     } catch (error: any) {
       set({
-        error: error.response?.data?.detail || 'Registration failed',
+        error: formatApiError(error, 'Registration failed'),
         isLoading: false,
       });
       throw error;

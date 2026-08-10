@@ -8,6 +8,7 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
+import { formatApiError } from '../src/utils/apiError';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { driverEnhancedApi } from '../src/api/driver-enhanced';
 import { OTPVerificationModal } from '../src/components/OTPVerificationModal';
@@ -81,7 +82,7 @@ export default function RidesEnhancedScreen() {
       setAvailableRides([]);
       Alert.alert('Success', 'Ride accepted! Now verify OTP to start.');
     } catch (error: any) {
-      Alert.alert('Error', error.response?.data?.detail || 'Failed to accept ride');
+      Alert.alert('Error', formatApiError(error, 'Failed to accept ride'));
     }
   };
 
@@ -90,7 +91,7 @@ export default function RidesEnhancedScreen() {
       await driverEnhancedApi.rejectRide(rideId);
       loadRides();
     } catch (error: any) {
-      Alert.alert('Error', error.response?.data?.detail || 'Failed to reject ride');
+      Alert.alert('Error', formatApiError(error, 'Failed to reject ride'));
     }
   };
 
@@ -118,7 +119,7 @@ export default function RidesEnhancedScreen() {
       setActiveRide(ride);
       Alert.alert('Success', 'Ride started!');
     } catch (error: any) {
-      Alert.alert('Error', error.response?.data?.detail || 'Failed to start ride');
+      Alert.alert('Error', formatApiError(error, 'Failed to start ride'));
     }
   };
 
@@ -138,7 +139,7 @@ export default function RidesEnhancedScreen() {
               Alert.alert('Success', 'Ride completed!');
               loadRides();
             } catch (error: any) {
-              Alert.alert('Error', error.response?.data?.detail || 'Failed to complete ride');
+              Alert.alert('Error', formatApiError(error, 'Failed to complete ride'));
             }
           },
         },
