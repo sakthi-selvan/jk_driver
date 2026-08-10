@@ -157,26 +157,80 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     try {
       set({ isInitializing: true });
       const token = await AsyncStorage.getItem('access_token');
+      const refresh = await AsyncStorage.getItem('refresh_token');
       const driverStr = await AsyncStorage.getItem('driver');
 
-      if (token && driverStr) {
-        const driver = JSON.parse(driverStr) as Driver;
-        setApiToken(token);
-        if (driver.is_active) {
+      if (!token) {
+        set({ isInitializing: false, isAuthenticated: false, accessToken: null });
+        return;
+      }
+
+      setApiToken(token);
+      let driver: Driver | null = null;
+      if (driverStr) {
+        try {
+          driver = JSON.parse(driverStr) as Driver;
+        } catch {
+          driver = null;
+        }
+      }
+
+      // Cached active session — show home immediately
+      if (driver?.is_active) {
+        set({
+          driver,
+          accessToken: token,
+          refreshToken: refresh,
+          isAuthenticated: true,
+          isInitializing: false,
+          accountStatus: 'active',
+        });
+        return;
+      }
+
+      // Token present but no usable cache — refresh profile from API
+      try {
+        const profile = await authApi.getProfile();
+        try {
+          await AsyncStorage.setItem('driver', JSON.stringify(profile));
+        } catch {}
+        if (profile.is_active) {
           set({
-            driver,
+            driver: profile,
             accessToken: token,
+            refreshToken: refresh,
             isAuthenticated: true,
             isInitializing: false,
             accountStatus: 'active',
           });
           return;
         }
+        set({
+          driver: profile,
+          accessToken: token,
+          refreshToken: refresh,
+          isAuthenticated: false,
+          isInitializing: false,
+          accountStatus: 'pending',
+        });
+      } catch {
+        // Invalid/expired token — clear and send to login
+        clearApiToken();
+        try {
+          await AsyncStorage.multiRemove(['access_token', 'refresh_token', 'driver']);
+        } catch {}
+        set({
+          driver: null,
+          accessToken: null,
+          refreshToken: null,
+          isAuthenticated: false,
+          isInitializing: false,
+          accountStatus: null,
+        });
       }
-      set({ isInitializing: false, isAuthenticated: false });
     } catch (error) {
       console.log('⚠️  Storage error during load:', error);
-      set({ isInitializing: false });
+      set({ isInitializing: false, isAuthenticated: false });
     }
   },
 

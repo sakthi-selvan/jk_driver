@@ -128,14 +128,23 @@ class ApiClient {
         const isMustBeOnline = error.response?.status === 400 &&
                                error.config?.url?.includes('/available') &&
                                JSON.stringify(error.response?.data).includes('must be online');
+        // FastAPI HTTPBearer returns 403 (not 401) when Authorization header is missing
+        const detail = (error.response?.data as any)?.detail;
+        const isUnauthenticated =
+          error.response?.status === 401 ||
+          (error.response?.status === 403 &&
+            (detail === 'Not authenticated' ||
+              (typeof detail === 'string' && detail.toLowerCase().includes('not authenticated'))));
 
-        if (!isNoActiveRide && !isCancelledRide && !isMustBeOnline && error.response?.status !== 401) {
+        if (!isNoActiveRide && !isCancelledRide && !isMustBeOnline && !isUnauthenticated) {
           console.error('❌ [DRIVER API ERROR]', error.message);
           console.error('📍 [URL]', error.config?.url);
           if (error.response) {
             console.error('📝 [STATUS]', error.response.status);
             console.error('📝 [DATA]', JSON.stringify(error.response.data));
           }
+        } else if (isUnauthenticated) {
+          console.log('ℹ️  [AUTH] Not logged in (skip profile until OTP)');
         } else if (isNoActiveRide) {
           console.log('ℹ️  [NO ACTIVE RIDE] Driver has no active ride (this is normal)');
         } else if (isCancelledRide) {

@@ -26,6 +26,7 @@ import { PaymentCollectionModal } from '../src/components/PaymentCollectionModal
 import { Colors, Spacing, FontSizes, FontWeights, BorderRadius } from '../src/constants/theme';
 import { EnhancedRide } from '../src/types/enhanced';
 import { MAPBOX_ACCESS_TOKEN, MAP_STYLES, ANIMATION_DURATION } from '../src/config/mapbox-config';
+import { initMapbox } from '../src/config/initMapbox';
 import { driverLocationService } from '../src/services/locationTracking';
 import { rideRealtime } from '../src/services/realtime';
 import { RouteProgressLayers } from '../src/components/map/RouteProgressLayers';
@@ -37,7 +38,7 @@ import {
 } from '../src/utils/routeProgress';
 import { BottomNav } from '../src/components/navigation/BottomNav';
 
-Mapbox.setAccessToken(MAPBOX_ACCESS_TOKEN);
+initMapbox();
 
 const { width } = Dimensions.get('window');
 
@@ -71,10 +72,12 @@ export default function HomeScreen() {
   const fetchingRouteRef = useRef(false);
   const lastRerouteAtRef = useRef(0);
 
-  // Initialize location and fetch current online status from server
+  // Initialize location; sync online status only when logged in
   useEffect(() => {
     initLocation();
-    fetchCurrentStatus();
+    if (useAuthStore.getState().accessToken || useAuthStore.getState().isAuthenticated) {
+      fetchCurrentStatus();
+    }
   }, []);
 
   // Ride polling and location push when online
@@ -501,6 +504,7 @@ export default function HomeScreen() {
         compassEnabled={false}
         attributionEnabled={true}
         logoEnabled={false}
+        surfaceView={false}
         onTouchStart={() => setFollowUser(false)}
       >
         <Mapbox.Camera

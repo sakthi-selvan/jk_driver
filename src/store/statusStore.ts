@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { formatApiError } from '../utils/apiError';
 import { ridesApi } from '../api/rides';
 import apiClient from '../api/client';
+import { useAuthStore } from './authStore';
 
 interface StatusState {
   isOnline: boolean;
@@ -21,9 +22,13 @@ export const useStatusStore = create<StatusState>((set, get) => ({
 
   fetchCurrentStatus: async () => {
     try {
+      // Skip when logged out — missing Bearer → FastAPI 403 "Not authenticated"
+      if (!useAuthStore.getState().accessToken && !useAuthStore.getState().isAuthenticated) {
+        return;
+      }
       const response = await apiClient.get('/api/driver/profile');
       const driver = response.data;
-      set({ isOnline: driver.is_online });
+      set({ isOnline: !!driver.is_online });
     } catch (error) {
       // If can't fetch, keep current state
     }
