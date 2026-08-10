@@ -112,6 +112,7 @@ export const NavigationMap: React.FC<NavigationMapProps> = ({
       ref={mapRef}
       style={styles.map}
       styleURL="mapbox://styles/mapbox/navigation-day-v1"
+      surfaceView={false}
       compassEnabled
       compassViewPosition={3}
       compassViewMargins={{ x: 16, y: 120 }}

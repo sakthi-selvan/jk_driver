@@ -6,10 +6,13 @@ import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
 import { useAuthStore } from '../src/store/authStore';
 import { Colors } from '../src/constants/theme';
+import { initMapbox } from '../src/config/initMapbox';
 
 export const unstable_settings = {
   initialRouteName: '(auth)/login',
 };
+
+initMapbox();
 
 export default function RootLayout() {
   const { isAuthenticated, isInitializing, accessToken, accountStatus, loadDriver } = useAuthStore();

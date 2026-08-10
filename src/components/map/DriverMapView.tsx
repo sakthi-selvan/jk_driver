@@ -162,6 +162,7 @@ export const DriverMapView: React.FC<DriverMapViewProps> = ({
         compassEnabled
         attributionEnabled
         logoEnabled={false}
+        surfaceView={false}
       >
         <Mapbox.Camera ref={cameraRef} animationDuration={ANIMATION_DURATION} />
         <Mapbox.UserLocation visible showsUserHeadingIndicator androidRenderMode="gps" />

@@ -178,7 +178,12 @@ export default function RideUiPreviewScreen() {
       </ScrollView>
 
       <View style={styles.mapWrap}>
-        <Mapbox.MapView style={StyleSheet.absoluteFill} styleURL={MAP_STYLES.STREETS} compassEnabled={false}>
+        <Mapbox.MapView
+          style={StyleSheet.absoluteFill}
+          styleURL={MAP_STYLES.STREETS}
+          surfaceView={false}
+          compassEnabled={false}
+        >
           <Mapbox.Camera
             ref={cameraRef}
             defaultSettings={{
