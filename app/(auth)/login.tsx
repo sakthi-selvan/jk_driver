@@ -10,6 +10,7 @@ import {
   TouchableOpacity,
   Linking,
   TextInput,
+  Image,
 } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -156,7 +157,11 @@ export default function LoginScreen() {
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           <View style={styles.header}>
             <View style={styles.logoContainer}>
-              <Ionicons name="car-sport" size={48} color={Colors.primary} />
+              <Image
+                source={require('../../assets/images/jk_taxi_logo.png')}
+                style={styles.logo}
+                resizeMode="contain"
+              />
             </View>
             <Text style={styles.title}>JK Taxi Driver</Text>
             <Text style={styles.subtitle}>
@@ -236,13 +241,13 @@ const styles = StyleSheet.create({
   scrollContent: { flexGrow: 1, padding: Spacing.lg, justifyContent: 'center' },
   header: { alignItems: 'center', marginBottom: Spacing.xl },
   logoContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: Colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: Spacing.md,
+  },
+  logo: {
+    width: 240,
+    height: 110,
   },
   title: {
     fontSize: FontSizes.xxxl,
