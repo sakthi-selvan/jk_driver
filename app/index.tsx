@@ -37,8 +37,6 @@ import {
   splitRouteProgress,
   type LngLat,
 } from '../src/utils/routeProgress';
-import { BottomNav } from '../src/components/navigation/BottomNav';
-
 initMapbox();
 
 const { width } = Dimensions.get('window');
@@ -845,8 +843,6 @@ export default function HomeScreen() {
         onClose={() => setDrawerOpen(false)}
         isOnline={isOnline}
       />
-
-      <BottomNav hidden={!!activeRide || !isOnline} />
     </View>
   );
 }

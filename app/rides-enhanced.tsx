@@ -18,7 +18,6 @@ import { Card } from '../src/components/common/Card';
 import { Colors, Spacing, FontSizes, FontWeights } from '../src/constants/theme';
 import { EnhancedRide } from '../src/types/enhanced';
 import { driverLocationService } from '../src/services/locationTracking';
-import { BottomNav } from '../src/components/navigation/BottomNav';
 
 export default function RidesEnhancedScreen() {
   const [availableRides, setAvailableRides] = useState<EnhancedRide[]>([]);
@@ -259,7 +258,6 @@ export default function RidesEnhancedScreen() {
           onClose={() => setShowOTPModal(false)}
         />
       )}
-      <BottomNav />
     </SafeAreaView>
   );
 }

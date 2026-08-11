@@ -5,7 +5,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { driverEnhancedApi } from '../src/api/driver-enhanced';
 import { Colors, Spacing, FontSizes, FontWeights, BorderRadius } from '../src/constants/theme';
-import { BottomNav } from '../src/components/navigation/BottomNav';
 
 interface EarningsData {
   today: { earnings: number; rides: number };
@@ -170,7 +169,6 @@ export default function WalletScreen() {
           </View>
         )}
       </ScrollView>
-      <BottomNav />
     </SafeAreaView>
   );
 }

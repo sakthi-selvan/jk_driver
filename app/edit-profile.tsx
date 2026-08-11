@@ -27,7 +27,6 @@ import { authApi } from '../src/api/auth';
 import { Button } from '../src/components/common/Button';
 import { Card } from '../src/components/common/Card';
 import { Colors, Spacing, FontSizes, FontWeights, BorderRadius } from '../src/constants/theme';
-import { BottomNav } from '../src/components/navigation/BottomNav';
 import { mediaUrl } from '../src/utils/mediaUrl';
 
 const GENDERS = ['Male', 'Female', 'Other', 'Prefer not to say'] as const;
@@ -251,7 +250,6 @@ export default function EditProfileScreen() {
           <Button title="Save Changes" onPress={handleSave} loading={isLoading} fullWidth style={styles.saveButton} />
         </ScrollView>
       </KeyboardAvoidingView>
-      <BottomNav />
     </SafeAreaView>
   );
 }
@@ -259,7 +257,7 @@ export default function EditProfileScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   keyboardView: { flex: 1 },
-  scrollContent: { padding: Spacing.lg, paddingBottom: 100 },
+  scrollContent: { padding: Spacing.lg, paddingBottom: Spacing.xl },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
