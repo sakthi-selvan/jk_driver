@@ -84,6 +84,56 @@ export default function HomeScreen() {
   const fetchingRouteRef = useRef(false);
   const lastRerouteAtRef = useRef(0);
   const loadRidesInFlight = useRef(false);
+  const loadRidesQueued = useRef(false);
+
+  const offerFromEvent = (data: any): EnhancedRide | null => {
+    const id = data?.ride_id || data?.id;
+    if (!id) return null;
+    return {
+      id: String(id),
+      user_id: String(data.user_id || ''),
+      status: 'pending',
+      trip_type: data.trip_type || 'one_way',
+      vehicle_category: data.vehicle_category || 'mini',
+      pickup_location: data.pickup_location || 'Pickup',
+      dropoff_location: data.dropoff_location,
+      pickup_lat: Number(data.pickup_lat) || 0,
+      pickup_lng: Number(data.pickup_lng) || 0,
+      dropoff_lat: data.dropoff_lat != null ? Number(data.dropoff_lat) : undefined,
+      dropoff_lng: data.dropoff_lng != null ? Number(data.dropoff_lng) : undefined,
+      stops: Array.isArray(data.stops) ? data.stops : [],
+      is_scheduled: Boolean(data.is_scheduled),
+      booking_for_self: data.booking_for_self !== false,
+      passenger_name: data.passenger_name,
+      passenger_phone: data.passenger_phone,
+      preferences: data.preferences || {
+        ac_preferred: false,
+        pet_friendly: false,
+        silent_ride: false,
+        extra_luggage: false,
+        wheelchair_support: false,
+      },
+      otp_verified: false,
+      fare: Number(data.fare) || 0,
+      base_fare: Number(data.base_fare) || 0,
+      distance_fare: Number(data.distance_fare) || 0,
+      platform_fee: Number(data.platform_fee) || 0,
+      gst: Number(data.gst) || 0,
+      toll_charges: Number(data.toll_charges) || 0,
+      night_charges: Number(data.night_charges) || 0,
+      waiting_charges: Number(data.waiting_charges) || 0,
+      payment_status: data.payment_status || 'pending',
+      payment_method: data.payment_method || 'cash',
+      distance_km: Number(data.distance_km) || 0,
+      eta_minutes: Number(data.eta_minutes) || 0,
+      trip_distance_km: data.trip_distance_km != null ? Number(data.trip_distance_km) : undefined,
+      offer_remaining_seconds:
+        data.offer_remaining_seconds != null ? Number(data.offer_remaining_seconds) : undefined,
+      offer_ttl_seconds: data.offer_ttl_seconds != null ? Number(data.offer_ttl_seconds) : undefined,
+      created_at: data.created_at || new Date().toISOString(),
+      updated_at: data.updated_at || new Date().toISOString(),
+    } as EnhancedRide;
+  };
 
   // Initialize location; sync online status only when logged in
   useEffect(() => {
@@ -115,6 +165,10 @@ export default function HomeScreen() {
       if (token) {
         rideRealtime.connect(token, activeRide?.id || null);
         const unsub = rideRealtime.onEvent((event, data) => {
+          if (event === 'socket_open') {
+            loadRides();
+            return;
+          }
           if (
             event === 'ride_offer' ||
             event === 'ride_created' ||
@@ -127,6 +181,23 @@ export default function HomeScreen() {
             event === 'ride_started' ||
             event === 'ride_completed'
           ) {
+            if (event === 'ride_offer') {
+              const myId = useAuthStore.getState().driver?.id;
+              const offeredTo = data?.offered_driver_id;
+              if (!offeredTo || !myId || String(offeredTo) === String(myId)) {
+                const stub = offerFromEvent(data);
+                if (stub && !rejectedRideIdsRef.current.has(stub.id)) {
+                  setAvailableRides((prev) => {
+                    if (prev.some((r) => String(r.id) === String(stub.id))) {
+                      return prev.map((r) =>
+                        String(r.id) === String(stub.id) ? { ...r, ...stub } : r
+                      );
+                    }
+                    return [stub, ...prev];
+                  });
+                }
+              }
+            }
             if (event === 'ride_taken' || event === 'offer_expired') {
               const takenId = data?.ride_id;
               if (takenId) {
@@ -146,10 +217,12 @@ export default function HomeScreen() {
                 };
               });
             }
+            // Always refresh from API, but never drop the event if a poll is in flight
             loadRides();
           }
         });
-        const interval = setInterval(loadRides, 15000); // slower poll; WS wakes sooner
+        // Fast poll while idle so missed WS offers still appear within ~3s
+        const interval = setInterval(loadRides, 3000);
         return () => {
           clearInterval(interval);
           unsub();
@@ -157,7 +230,7 @@ export default function HomeScreen() {
           stopLocationPush();
         };
       }
-      const interval = setInterval(loadRides, 8000);
+      const interval = setInterval(loadRides, 3000);
       return () => {
         clearInterval(interval);
         stopLocationPush();
@@ -304,7 +377,11 @@ export default function HomeScreen() {
   };
 
   const loadRides = async () => {
-    if (loadRidesInFlight.current) return;
+    if (loadRidesInFlight.current) {
+      // Coalesce: run again after the in-flight request (do not drop WS offers)
+      loadRidesQueued.current = true;
+      return;
+    }
     loadRidesInFlight.current = true;
     try {
       const active = await driverEnhancedApi.getActiveRide();
@@ -317,7 +394,13 @@ export default function HomeScreen() {
         try {
           const available = await driverEnhancedApi.getAvailableRides();
           const filtered = available.filter((r: any) => !rejectedRideIdsRef.current.has(r.id));
-          setAvailableRides((prev) => (sameRideListUi(prev, filtered) ? prev : filtered));
+          setAvailableRides((prev) => {
+            // Prefer API list, but keep optimistic WS stubs until API includes them
+            if (sameRideListUi(prev, filtered)) return prev;
+            if (filtered.length > 0) return filtered;
+            // API empty — keep any optimistic offers already on screen
+            return prev;
+          });
         } catch {
           // Keep previous list on soft poll failure — avoid empty flash
         }
@@ -325,6 +408,10 @@ export default function HomeScreen() {
     } finally {
       loadRidesInFlight.current = false;
       setIsLoading(false);
+      if (loadRidesQueued.current) {
+        loadRidesQueued.current = false;
+        loadRides();
+      }
     }
   };
 

@@ -22,6 +22,8 @@ import { Colors, Spacing, FontSizes, FontWeights } from '../src/constants/theme'
 import { EnhancedRide } from '../src/types/enhanced';
 import { driverLocationService } from '../src/services/locationTracking';
 import { sameRideListUi, sameRideUi } from '../src/utils/stableUpdate';
+import { rideRealtime } from '../src/services/realtime';
+import { useAuthStore } from '../src/store/authStore';
 
 export default function RidesEnhancedScreen() {
   const [availableRides, setAvailableRides] = useState<EnhancedRide[]>([]);
@@ -32,6 +34,7 @@ export default function RidesEnhancedScreen() {
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const hasLoadedOnceRef = useRef(false);
   const loadInFlight = useRef(false);
+  const loadQueued = useRef(false);
 
   const setActiveRideStable = useCallback((next: EnhancedRide | null) => {
     setActiveRide((prev) => (sameRideUi(prev, next) ? prev : next));
@@ -44,7 +47,10 @@ export default function RidesEnhancedScreen() {
   const loadRides = useCallback(async (opts?: { soft?: boolean; pull?: boolean }) => {
     const soft = opts?.soft ?? hasLoadedOnceRef.current;
     const pull = opts?.pull ?? false;
-    if (loadInFlight.current) return;
+    if (loadInFlight.current) {
+      loadQueued.current = true;
+      return;
+    }
     loadInFlight.current = true;
 
     try {
@@ -59,9 +65,13 @@ export default function RidesEnhancedScreen() {
           setActiveRideStable(null);
           try {
             const available = await driverEnhancedApi.getAvailableRides();
-            setAvailableRidesStable(Array.isArray(available) ? available : []);
+            const next = Array.isArray(available) ? available : [];
+            setAvailableRides((prev) => {
+              if (sameRideListUi(prev, next)) return prev;
+              if (next.length > 0) return next;
+              return prev;
+            });
           } catch {
-            // Keep previous list on background failure — don't flash empty
             if (!soft) setAvailableRidesStable([]);
           }
         }
@@ -74,13 +84,91 @@ export default function RidesEnhancedScreen() {
       setHasLoadedOnce(true);
       setIsLoading(false);
       setIsRefreshing(false);
+      if (loadQueued.current) {
+        loadQueued.current = false;
+        loadRides({ soft: true });
+      }
     }
   }, [setActiveRideStable, setAvailableRidesStable]);
 
   useEffect(() => {
     loadRides({ soft: false });
-    const interval = setInterval(() => loadRides({ soft: true }), 10000);
-    return () => clearInterval(interval);
+    const interval = setInterval(() => loadRides({ soft: true }), 3000);
+
+    const token = useAuthStore.getState().accessToken;
+    let unsub: (() => void) | undefined;
+    if (token) {
+      rideRealtime.connect(token, null);
+      unsub = rideRealtime.onEvent((event, data) => {
+        if (event === 'socket_open' || event === 'ride_offer' || event === 'offer_expired' || event === 'ride_taken' || event === 'ride_cancelled' || event === 'ride_accepted') {
+          if (event === 'ride_offer' && (data?.ride_id || data?.id)) {
+            const myId = useAuthStore.getState().driver?.id;
+            const offeredTo = data?.offered_driver_id;
+            if (!offeredTo || !myId || String(offeredTo) === String(myId)) {
+              const id = String(data.ride_id || data.id);
+              setAvailableRides((prev) => {
+                if (prev.some((r) => String(r.id) === id)) return prev;
+                const stub = {
+                  id,
+                  user_id: String(data.user_id || ''),
+                  status: 'pending',
+                  trip_type: data.trip_type || 'one_way',
+                  vehicle_category: data.vehicle_category || 'mini',
+                  pickup_location: data.pickup_location || 'Pickup',
+                  dropoff_location: data.dropoff_location,
+                  pickup_lat: Number(data.pickup_lat) || 0,
+                  pickup_lng: Number(data.pickup_lng) || 0,
+                  dropoff_lat: data.dropoff_lat != null ? Number(data.dropoff_lat) : undefined,
+                  dropoff_lng: data.dropoff_lng != null ? Number(data.dropoff_lng) : undefined,
+                  stops: Array.isArray(data.stops) ? data.stops : [],
+                  is_scheduled: Boolean(data.is_scheduled),
+                  booking_for_self: data.booking_for_self !== false,
+                  preferences: data.preferences || {
+                    ac_preferred: false,
+                    pet_friendly: false,
+                    silent_ride: false,
+                    extra_luggage: false,
+                    wheelchair_support: false,
+                  },
+                  otp_verified: false,
+                  fare: Number(data.fare) || 0,
+                  base_fare: Number(data.base_fare) || 0,
+                  distance_fare: Number(data.distance_fare) || 0,
+                  platform_fee: Number(data.platform_fee) || 0,
+                  gst: Number(data.gst) || 0,
+                  toll_charges: Number(data.toll_charges) || 0,
+                  night_charges: Number(data.night_charges) || 0,
+                  waiting_charges: Number(data.waiting_charges) || 0,
+                  payment_status: data.payment_status || 'pending',
+                  payment_method: data.payment_method || 'cash',
+                  distance_km: Number(data.distance_km) || 0,
+                  eta_minutes: Number(data.eta_minutes) || 0,
+                  offer_remaining_seconds:
+                    data.offer_remaining_seconds != null
+                      ? Number(data.offer_remaining_seconds)
+                      : undefined,
+                  created_at: new Date().toISOString(),
+                  updated_at: new Date().toISOString(),
+                } as EnhancedRide;
+                return [stub, ...prev];
+              });
+            }
+          }
+          if (event === 'ride_taken' || event === 'offer_expired') {
+            const takenId = data?.ride_id;
+            if (takenId) {
+              setAvailableRides((prev) => prev.filter((r) => String(r.id) !== String(takenId)));
+            }
+          }
+          loadRides({ soft: true });
+        }
+      });
+    }
+
+    return () => {
+      clearInterval(interval);
+      unsub?.();
+    };
   }, [loadRides]);
 
   // Push location to server when ride is active
