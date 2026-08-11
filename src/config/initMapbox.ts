@@ -1,28 +1,29 @@
 import Mapbox from '@rnmapbox/maps';
-import { MAPBOX_ACCESS_TOKEN } from './mapbox-config';
+import {
+  getMapboxAccessToken,
+  setRuntimeMapboxToken,
+  clearRuntimeMapboxToken,
+} from './mapbox-config';
 
 let initialized = false;
 
-/**
- * Call once at app boot. Empty token → black MapView on devices.
- * Android: prefer TextureView (surfaceView=false) to avoid OEM black-screen bugs.
- */
 export function initMapbox(): { ok: boolean; reason?: string } {
-  if (initialized) {
-    return { ok: Boolean(MAPBOX_ACCESS_TOKEN) };
+  const token = getMapboxAccessToken();
+  if (!initialized) {
+    initialized = true;
+    try {
+      Mapbox.setTelemetryEnabled?.(false);
+    } catch {
+      // ignore
+    }
   }
-  initialized = true;
 
-  if (!MAPBOX_ACCESS_TOKEN) {
-    console.warn(
-      '[Mapbox] EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN is missing. Maps will render blank.'
-    );
+  if (!token) {
     return { ok: false, reason: 'missing_token' };
   }
 
   try {
-    Mapbox.setAccessToken(MAPBOX_ACCESS_TOKEN);
-    Mapbox.setTelemetryEnabled?.(false);
+    Mapbox.setAccessToken(token);
   } catch (e) {
     console.warn('[Mapbox] setAccessToken failed', e);
     return { ok: false, reason: 'init_failed' };
@@ -31,12 +32,33 @@ export function initMapbox(): { ok: boolean; reason?: string } {
   return { ok: true };
 }
 
-/**
- * Android: false = TextureView (fixes blank/black maps on many OEMs + React Navigation).
- * iOS ignores this prop.
- */
+export function applyMapboxAccessToken(token: string): boolean {
+  setRuntimeMapboxToken(token);
+  try {
+    Mapbox.setAccessToken(getMapboxAccessToken());
+    initialized = true;
+    return true;
+  } catch (e) {
+    console.warn('[Mapbox] apply token failed', e);
+    return false;
+  }
+}
+
+export function resetMapboxRuntimeToken(): void {
+  clearRuntimeMapboxToken();
+  const env = getMapboxAccessToken();
+  if (env) {
+    try {
+      Mapbox.setAccessToken(env);
+    } catch {
+      // ignore
+    }
+  }
+}
+
 export const MAP_SURFACE_VIEW = false;
 
 export function mapboxTokenPresent(): boolean {
-  return Boolean(MAPBOX_ACCESS_TOKEN && MAPBOX_ACCESS_TOKEN.length > 10);
+  const t = getMapboxAccessToken();
+  return Boolean(t && t.length > 10);
 }

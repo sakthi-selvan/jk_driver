@@ -4,6 +4,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Driver } from '../types';
 import { authApi, DriverCompleteRegistrationData, DriverOTPAuthResponse } from '../api/auth';
 import { setApiToken, clearApiToken } from '../api/client';
+import { ensureMapboxTokenAfterAuth, clearCachedMapboxToken } from '../services/mapboxAuth';
+import { resetMapboxRuntimeToken } from '../config/initMapbox';
 
 interface AuthState {
   driver: Driver | null;
@@ -94,6 +96,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           otpSent: false,
           otpPhone: null,
         });
+        await ensureMapboxTokenAfterAuth();
       } else {
         // pending or incomplete — keep tokens, not fully authenticated for home
         set({
@@ -102,6 +105,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           otpSent: false,
           otpPhone: null,
         });
+        await ensureMapboxTokenAfterAuth();
       }
 
       return response;
@@ -135,6 +139,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   logout: async () => {
     clearApiToken();
+    resetMapboxRuntimeToken();
+    await clearCachedMapboxToken();
     try {
       await AsyncStorage.multiRemove(['access_token', 'refresh_token', 'driver']);
     } catch (error) {
@@ -185,6 +191,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           isInitializing: false,
           accountStatus: 'active',
         });
+        await ensureMapboxTokenAfterAuth();
         return;
       }
 
@@ -203,6 +210,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
             isInitializing: false,
             accountStatus: 'active',
           });
+          await ensureMapboxTokenAfterAuth();
           return;
         }
         set({
@@ -213,6 +221,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           isInitializing: false,
           accountStatus: 'pending',
         });
+        await ensureMapboxTokenAfterAuth();
       } catch {
         // Invalid/expired token — clear and send to login
         clearApiToken();
