@@ -3,10 +3,8 @@ import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   KeyboardAvoidingView,
   Platform,
-  Alert,
   TouchableOpacity,
   Linking,
   TextInput,
@@ -151,10 +149,10 @@ export default function LoginScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.keyboardView}
       >
-        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        <View style={styles.content}>
           <View style={styles.header}>
             <View style={styles.logoContainer}>
               <Image
@@ -229,7 +227,7 @@ export default function LoginScreen() {
           </Card>
 
           <Text style={styles.hint}>New captain? Verify OTP, then complete your profile & documents.</Text>
-        </ScrollView>
+        </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -238,16 +236,21 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   keyboardView: { flex: 1 },
-  scrollContent: { flexGrow: 1, padding: Spacing.lg, justifyContent: 'center' },
-  header: { alignItems: 'center', marginBottom: Spacing.xl },
+  content: {
+    flex: 1,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
+    justifyContent: 'center',
+  },
+  header: { alignItems: 'center', marginBottom: Spacing.lg },
   logoContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: Spacing.md,
+    marginBottom: Spacing.sm,
   },
   logo: {
-    width: '82%',
-    maxWidth: 300,
+    width: '70%',
+    maxWidth: 240,
     aspectRatio: 1024 / 469,
   },
   title: {

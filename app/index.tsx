@@ -5,7 +5,6 @@ import {
   StyleSheet,
   TouchableOpacity,
   Alert,
-  ScrollView,
   Linking,
   Platform,
   Dimensions,
@@ -15,7 +14,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import * as Location from 'expo-location';
-import Mapbox from '@rnmapbox/maps';
+import Mapbox, { UserTrackingMode } from '@rnmapbox/maps';
 import { useAuthStore } from '../src/store/authStore';
 import { useStatusStore } from '../src/store/statusStore';
 import { driverEnhancedApi } from '../src/api/driver-enhanced';
@@ -23,6 +22,7 @@ import { OTPVerificationModal } from '../src/components/OTPVerificationModal';
 import { DriverDrawer } from '../src/components/DriverDrawer';
 import { CancelRideModal } from '../src/components/CancelRideModal';
 import { PaymentCollectionModal } from '../src/components/PaymentCollectionModal';
+import { ActiveRideBottomSheet } from '../src/components/ActiveRideBottomSheet';
 import { Colors, Spacing, FontSizes, FontWeights, BorderRadius } from '../src/constants/theme';
 import { EnhancedRide } from '../src/types/enhanced';
 import { MAPBOX_ACCESS_TOKEN, MAP_STYLES, ANIMATION_DURATION } from '../src/config/mapbox-config';
@@ -31,6 +31,7 @@ import { ensureMapboxTokenAfterAuth } from '../src/services/mapboxAuth';
 import { driverLocationService } from '../src/services/locationTracking';
 import { rideRealtime } from '../src/services/realtime';
 import { RouteProgressLayers } from '../src/components/map/RouteProgressLayers';
+import { normalizeFleetCategory } from '../src/components/map/VehicleMarker';
 import {
   estimateRemainingMinutes,
   remainingDistanceMeters,
@@ -40,6 +41,15 @@ import {
 initMapbox();
 
 const { width } = Dimensions.get('window');
+
+const FLEET_PUCK_IMAGES = {
+  bike: require('../assets/map_markers/bike.png'),
+  auto: require('../assets/map_markers/auto.png'),
+  mini: require('../assets/map_markers/mini.png'),
+  sedan: require('../assets/map_markers/sedan.png'),
+  suv: require('../assets/map_markers/suv.png'),
+  other: require('../assets/map_markers/mini.png'),
+} as const;
 
 export default function HomeScreen() {
   const { driver, logout } = useAuthStore();
@@ -64,6 +74,7 @@ export default function HomeScreen() {
   const [routeInfo, setRouteInfo] = useState<{ distance: number; duration: number } | null>(null);
   const [userHeading, setUserHeading] = useState(0);
   const [followUser, setFollowUser] = useState(true);
+  const [sheetHeight, setSheetHeight] = useState(280);
   const cameraRef = useRef<Mapbox.Camera>(null);
   const locationIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const locationWatchRef = useRef<Location.LocationSubscription | null>(null);
@@ -509,13 +520,13 @@ export default function HomeScreen() {
     cameraRef.current.fitBounds(ne, sw, [150, 80, 320, 80], 1500);
   };
 
-  // Recenter handler: follow driver
+  // Recenter handler: follow driver in navigation mode
   const handleRecenter = () => {
     setFollowUser(true);
     if (cameraRef.current) {
       cameraRef.current.setCamera({
         centerCoordinate: [driverLoc.longitude, driverLoc.latitude],
-        zoomLevel: 16,
+        zoomLevel: activeRide ? 18 : 16,
         pitch: activeRide ? 60 : 0,
         heading: activeRide ? userHeading : 0,
         animationDuration: 1000,
@@ -523,35 +534,76 @@ export default function HomeScreen() {
     }
   };
 
+  const inNavMode = !!(activeRide && (activeRide.status === 'accepted' || activeRide.status === 'started'));
+  const fleetCategory = normalizeFleetCategory((driver as any)?.vehicle_type);
+  const puckKey =
+    fleetCategory === 'bike' ||
+    fleetCategory === 'auto' ||
+    fleetCategory === 'mini' ||
+    fleetCategory === 'sedan' ||
+    fleetCategory === 'suv'
+      ? fleetCategory
+      : 'other';
+
   return (
     <View style={styles.container}>
-      {/* Map - Google Maps style */}
+      {/* Map — navigation-day style + course follow after accept */}
       {mapReady ? (
       <Mapbox.MapView
         style={styles.map}
-        styleURL="mapbox://styles/mapbox/streets-v12"
-        compassEnabled={false}
+        styleURL={inNavMode ? MAP_STYLES.NAVIGATION_DAY : MAP_STYLES.STREETS}
+        compassEnabled={inNavMode}
+        compassViewPosition={3}
+        compassViewMargins={{ x: 16, y: 120 }}
         attributionEnabled={true}
         logoEnabled={false}
         surfaceView={false}
+        pitchEnabled={inNavMode}
+        rotateEnabled={inNavMode}
         onTouchStart={() => setFollowUser(false)}
       >
         <Mapbox.Camera
           ref={cameraRef}
-          zoomLevel={16}
+          zoomLevel={inNavMode ? 18 : 16}
           centerCoordinate={[driverLoc.longitude, driverLoc.latitude]}
           animationDuration={800}
           followUserLocation={followUser}
-          followUserMode={followUser && activeRide ? "course" : "normal"}
-          followZoomLevel={followUser && activeRide ? 17 : 15}
-          followPitch={followUser && activeRide ? 50 : 0}
+          followUserMode={
+            followUser && inNavMode
+              ? UserTrackingMode.FollowWithCourse
+              : UserTrackingMode.Follow
+          }
+          followZoomLevel={followUser && inNavMode ? 18 : 15}
+          followPitch={followUser && inNavMode ? 60 : 0}
+          followPadding={
+            inNavMode
+              ? {
+                  paddingTop: 80,
+                  paddingBottom: Math.max(sheetHeight, 120) + 24,
+                  paddingLeft: 40,
+                  paddingRight: 40,
+                }
+              : undefined
+          }
         />
 
-        {/* Blue dot with direction arrow */}
-        <Mapbox.LocationPuck
-          puckBearingEnabled
-          puckBearing="course"
-        />
+        {/* Fleet car puck that rotates with course (Google Maps–style) */}
+        {inNavMode ? (
+          <>
+            <Mapbox.Images images={FLEET_PUCK_IMAGES} />
+            <Mapbox.LocationPuck
+              visible
+              bearingImage={puckKey}
+              topImage={puckKey}
+              puckBearingEnabled
+              puckBearing="course"
+              scale={1.4}
+              pulsing={{ isEnabled: true, color: '#1A73E8', radius: 48 }}
+            />
+          </>
+        ) : (
+          <Mapbox.LocationPuck puckBearingEnabled puckBearing="course" />
+        )}
 
         {/* Google Maps–style route progress: grey travelled + blue remaining */}
         <RouteProgressLayers
@@ -591,7 +643,7 @@ export default function HomeScreen() {
       )}
 
       {/* Map Control Buttons - Right side */}
-      <View style={[styles.mapControls, { bottom: activeRide ? 300 : 80 }]}>
+      <View style={[styles.mapControls, { bottom: activeRide ? sheetHeight + 16 : 80 }]}>
         {/* Overview button - show full route */}
         {activeRide && routeCoords && (
           <TouchableOpacity style={styles.mapControlBtn} onPress={handleOverview}>
@@ -642,18 +694,12 @@ export default function HomeScreen() {
       )}
 
 
-      {/* Active ride bottom panel - scrollable, compact */}
+      {/* Active ride bottom sheet — drag down to peek, up to expand */}
       {activeRide && (
-        <View style={[styles.activeRidePanel, { paddingBottom: insets.bottom + 8 }]}>
-          {/* Drag handle */}
-          <View style={styles.dragHandle} />
-
-          <ScrollView
-            style={styles.panelScroll}
-            showsVerticalScrollIndicator={true}
-            nestedScrollEnabled={true}
-            bounces={false}
-          >
+        <ActiveRideBottomSheet
+          bottomInset={insets.bottom}
+          onVisibleHeightChange={setSheetHeight}
+        >
             {/* Route Info - Distance & Time */}
             {liveRouteInfo && (
               <View style={styles.rideRouteInfo}>
@@ -751,8 +797,7 @@ export default function HomeScreen() {
                 <Text style={styles.completeBtnText}>End Ride</Text>
               </TouchableOpacity>
             )}
-          </ScrollView>
-        </View>
+        </ActiveRideBottomSheet>
       )}
 
       {/* Available Ride Card - shown when no active ride */}
@@ -972,15 +1017,6 @@ const styles = StyleSheet.create({
   rejectBtn: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#FEE2E2', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#EF4444' },
   acceptBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.primary, borderRadius: 12, paddingVertical: 14, gap: 6 },
   acceptBtnText: { color: '#FFF', fontSize: 16, fontWeight: '700' },
-
-  // Active ride panel - compact, scrollable
-  activeRidePanel: { position: 'absolute', left: 0, right: 0, bottom: 0, maxHeight: 280, backgroundColor: '#FFF', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 16, paddingTop: 8, shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.15, shadowRadius: 8, elevation: 10, borderTopWidth: 3, borderTopColor: Colors.primary },
-
-  // Panel scroll
-  panelScroll: { flexGrow: 0 },
-
-  // Drag handle
-  dragHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: '#DDD', alignSelf: 'center', marginBottom: 10 },
 
   // Route info in bottom panel
   rideRouteInfo: {

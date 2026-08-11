@@ -42,7 +42,7 @@ export const ZOOM_LEVELS = {
 
 export const ANIMATION_DURATION = 1000;
 
-export const NAVIGATION_MODE: 'external_maps' | 'embedded' = 'external_maps';
+export const NAVIGATION_MODE: 'external_maps' | 'embedded' = 'embedded';
 
 export const MAP_PADDING = {
   top: 100,
