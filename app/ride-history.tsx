@@ -122,16 +122,9 @@ export default function RideHistoryScreen() {
               <Detail label="Cancel reason" value={String((item as any).cancellation_reason)} />
             ) : null}
             <Detail label="Ride ID" value={String(item.id)} />
-            <TouchableOpacity
-              style={styles.detailsBtn}
-              onPress={() => router.push({ pathname: '/ride-details', params: { id: item.id } })}
-            >
-              <Text style={styles.detailsBtnText}>Open full details</Text>
-              <Ionicons name="chevron-forward" size={16} color={Colors.primary} />
-            </TouchableOpacity>
           </View>
         ) : (
-          <Text style={styles.tapHint}>Tap for full ride details</Text>
+          <Text style={styles.tapHint}>Tap for more details</Text>
         )}
       </TouchableOpacity>
     );
@@ -243,15 +236,4 @@ const styles = StyleSheet.create({
   detailRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 12 },
   detailLabel: { fontSize: 12, color: '#94A3B8', fontWeight: '600' },
   detailValue: { flex: 1, textAlign: 'right', fontSize: 12, color: '#0F172A', textTransform: 'capitalize' },
-  detailsBtn: {
-    marginTop: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-    paddingVertical: 10,
-    borderRadius: 10,
-    backgroundColor: Colors.primarySoft || '#EEF2FF',
-  },
-  detailsBtnText: { color: Colors.primary, fontWeight: '700', fontSize: 13 },
 });
