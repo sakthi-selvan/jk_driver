@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -30,52 +30,84 @@ export default function RideDetailsScreen() {
   const [ride, setRide] = useState<EnhancedRide | null>(null);
   const [driverLocation, setDriverLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [notFound, setNotFound] = useState(false);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const locationWatchRef = useRef<Location.LocationSubscription | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
+
+    const loadRideDetails = async () => {
+      if (!rideId) {
+        setNotFound(true);
+        setIsLoading(false);
+        return;
+      }
+      try {
+        const data = await driverEnhancedApi.getRideDetails(rideId);
+        if (cancelled) return;
+        setRide(data);
+        setNotFound(false);
+        // Stop polling once ride is finished
+        if (data.status === 'completed' || data.status === 'cancelled') {
+          if (pollRef.current) {
+            clearInterval(pollRef.current);
+            pollRef.current = null;
+          }
+        }
+      } catch (error: any) {
+        if (cancelled) return;
+        const status = error?.response?.status;
+        if (status === 404) {
+          setNotFound(true);
+          setRide(null);
+          if (pollRef.current) {
+            clearInterval(pollRef.current);
+            pollRef.current = null;
+          }
+        }
+        // Expected when ride was removed / never assigned — do not spam console.error
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    };
+
+    setIsLoading(true);
+    setNotFound(false);
     loadRideDetails();
     startLocationTracking();
 
-    const interval = setInterval(loadRideDetails, 10000);
-    return () => clearInterval(interval);
+    pollRef.current = setInterval(loadRideDetails, 10000);
+    return () => {
+      cancelled = true;
+      if (pollRef.current) clearInterval(pollRef.current);
+      locationWatchRef.current?.remove();
+      locationWatchRef.current = null;
+    };
   }, [rideId]);
-
-  const loadRideDetails = async () => {
-    try {
-      const data = await driverEnhancedApi.getRideDetails(rideId);
-      setRide(data);
-    } catch (error: any) {
-      console.error('Error loading ride details:', error);
-      Alert.alert('Error', 'Failed to load ride details');
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   const startLocationTracking = async () => {
     const { status } = await Location.requestForegroundPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert('Permission Required', 'Location permission is required to track your location');
       return;
     }
 
-    // Get current location
     const location = await Location.getCurrentPositionAsync({});
     setDriverLocation({
       latitude: location.coords.latitude,
       longitude: location.coords.longitude,
     });
 
-    // Watch location
-    Location.watchPositionAsync(
+    locationWatchRef.current = await Location.watchPositionAsync(
       {
         accuracy: Location.Accuracy.High,
         timeInterval: 5000,
         distanceInterval: 10,
       },
-      (location) => {
+      (loc) => {
         setDriverLocation({
-          latitude: location.coords.latitude,
-          longitude: location.coords.longitude,
+          latitude: loc.coords.latitude,
+          longitude: loc.coords.longitude,
         });
       }
     );
@@ -150,11 +182,33 @@ export default function RideDetailsScreen() {
     );
   };
 
-  if (isLoading || !ride) {
+  if (isLoading) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.centerContent}>
           <Text style={styles.loadingText}>Loading ride details...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (notFound || !ride) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <Ionicons name="arrow-back" size={24} color={Colors.text} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Ride Details</Text>
+          <View style={{ width: 40 }} />
+        </View>
+        <View style={styles.centerContent}>
+          <Ionicons name="car-outline" size={48} color="#94A3B8" />
+          <Text style={styles.missingTitle}>Ride not available</Text>
+          <Text style={styles.missingSub}>
+            This trip was cancelled or is no longer assigned to you.
+          </Text>
+          <Button title="Go Back" onPress={() => router.back()} style={{ marginTop: 16 }} />
         </View>
       </SafeAreaView>
     );
@@ -273,34 +327,36 @@ export default function RideDetailsScreen() {
             </Card>
           )}
 
-          {/* Action Buttons */}
-          <View style={styles.actions}>
-            <Button
-              title="Navigate"
-              variant="outline"
-              onPress={handleNavigate}
-              style={styles.actionButton}
-              icon={<Ionicons name="navigate" size={20} color={Colors.primary} />}
-            />
-
-            {ride.status === 'accepted' && ride.otp_verified && (
+          {/* Action Buttons — only for live trips */}
+          {(ride.status === 'accepted' || ride.status === 'started') && (
+            <View style={styles.actions}>
               <Button
-                title="Start Ride"
-                onPress={handleStartRide}
+                title="Navigate"
+                variant="outline"
+                onPress={handleNavigate}
                 style={styles.actionButton}
-                icon={<Ionicons name="play-circle" size={20} color={Colors.white} />}
+                icon={<Ionicons name="navigate" size={20} color={Colors.primary} />}
               />
-            )}
 
-            {ride.status === 'started' && (
-              <Button
-                title="Complete Ride"
-                onPress={handleCompleteRide}
-                style={styles.actionButton}
-                icon={<Ionicons name="checkmark-circle" size={20} color={Colors.white} />}
-              />
-            )}
-          </View>
+              {ride.status === 'accepted' && ride.otp_verified && (
+                <Button
+                  title="Start Ride"
+                  onPress={handleStartRide}
+                  style={styles.actionButton}
+                  icon={<Ionicons name="play-circle" size={20} color={Colors.white} />}
+                />
+              )}
+
+              {ride.status === 'started' && (
+                <Button
+                  title="Complete Ride"
+                  onPress={handleCompleteRide}
+                  style={styles.actionButton}
+                  icon={<Ionicons name="checkmark-circle" size={20} color={Colors.white} />}
+                />
+              )}
+            </View>
+          )}
         </ScrollView>
       </View>
     </SafeAreaView>
@@ -316,10 +372,24 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    paddingHorizontal: Spacing.xl,
   },
   loadingText: {
     fontSize: FontSizes.md,
     color: Colors.textSecondary,
+  },
+  missingTitle: {
+    marginTop: Spacing.md,
+    fontSize: FontSizes.lg,
+    fontWeight: FontWeights.bold,
+    color: Colors.text,
+  },
+  missingSub: {
+    marginTop: Spacing.xs,
+    fontSize: FontSizes.sm,
+    color: Colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 20,
   },
   header: {
     flexDirection: 'row',

@@ -123,8 +123,12 @@ class ApiClient {
 
         const isNoActiveRide = error.response?.status === 404 &&
                                error.config?.url?.includes('/active');
+        const url = error.config?.url || '';
+        const isRideDetail404 =
+          error.response?.status === 404 &&
+          /\/rides\/[^/]+$/.test(url.replace(/\?.*$/, ''));
         const isCancelledRide = error.response?.status === 404 &&
-                                (error.config?.url?.includes('/rides/') || error.config?.url?.includes('/cancel'));
+                                (url.includes('/cancel') || url.includes('/reject'));
         const isMustBeOnline = error.response?.status === 400 &&
                                error.config?.url?.includes('/available') &&
                                JSON.stringify(error.response?.data).includes('must be online');
@@ -144,6 +148,7 @@ class ApiClient {
         if (
           !isNoActiveRide &&
           !isCancelledRide &&
+          !isRideDetail404 &&
           !isMustBeOnline &&
           !isUnauthenticated &&
           !isDropoffTooFar
@@ -158,6 +163,8 @@ class ApiClient {
           console.log('ℹ️  [AUTH] Not logged in (skip profile until OTP)');
         } else if (isNoActiveRide) {
           console.log('ℹ️  [NO ACTIVE RIDE] Driver has no active ride (this is normal)');
+        } else if (isRideDetail404) {
+          console.log('ℹ️  [RIDE DETAILS] Ride not found for this driver (cancelled or reassigned)');
         } else if (isCancelledRide) {
           console.log('ℹ️  [CANCELLED RIDE] Ride was cancelled and no longer exists (this is normal)');
         } else if (isMustBeOnline) {
