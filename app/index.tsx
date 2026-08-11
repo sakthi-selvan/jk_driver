@@ -343,9 +343,24 @@ export default function HomeScreen() {
           text: isOnline ? 'Go Offline' : 'Go Online',
           onPress: async () => {
             try {
+              // When going offline -> online, backend requires at least one GPS push
+              // (it checks current_lat/current_lng). Upload one fix first.
+              if (!isOnline) {
+                try {
+                  await driverLocationService.pushOnce();
+                } catch {
+                  Alert.alert('GPS Required', 'Enable location and try again.');
+                  return;
+                }
+              }
               await toggleStatus();
-            } catch {
-              Alert.alert('Error', 'Failed to update status.');
+            } catch (e: any) {
+              const detail = e?.response?.data?.detail;
+              if (detail && String(detail).toLowerCase().includes('gps')) {
+                Alert.alert('Share GPS location', String(detail));
+              } else {
+                Alert.alert('Error', 'Failed to update status.');
+              }
             }
           }
         },
