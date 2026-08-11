@@ -14,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { driverEnhancedApi } from '../src/api/driver-enhanced';
 import { Colors, Spacing, FontSizes, FontWeights, BorderRadius } from '../src/constants/theme';
 import { EnhancedRide } from '../src/types/enhanced';
+import { sameRideListUi } from '../src/utils/stableUpdate';
 
 function formatWhen(iso?: string) {
   if (!iso) return '—';
@@ -47,9 +48,10 @@ export default function RideHistoryScreen() {
     try {
       if (!soft) setLoading(true);
       const data = await driverEnhancedApi.getRideHistory();
-      setRides(Array.isArray(data) ? data : []);
+      const next = Array.isArray(data) ? data : [];
+      setRides((prev) => (sameRideListUi(prev, next) ? prev : next));
     } catch {
-      setRides([]);
+      if (!soft) setRides([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -58,7 +60,8 @@ export default function RideHistoryScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      load();
+      // Soft reload on focus — keep list visible, refresh in background
+      load(true);
     }, [load])
   );
 
@@ -144,7 +147,7 @@ export default function RideHistoryScreen() {
         <View style={{ width: 40 }} />
       </View>
 
-      {loading ? (
+      {loading && rides.length === 0 ? (
         <View style={styles.center}>
           <ActivityIndicator size="large" color={Colors.primary} />
         </View>

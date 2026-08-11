@@ -72,6 +72,16 @@ export interface EnhancedRide {
   route_source?: string | null;
   offer_ttl_seconds?: number;
   offer_remaining_seconds?: number;
+  driver_name?: string;
+  driver_phone?: string;
+  driver_vehicle_number?: string;
+  driver_vehicle_type?: string;
+  driver_vehicle_image?: string;
+  driver_total_rides?: number;
+  driver_average_rating?: number | null;
+  driver_rating_count?: number;
+  customer_name?: string;
+  customer_phone?: string;
   created_at: string;
   updated_at: string;
   customer?: Customer;

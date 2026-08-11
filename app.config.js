@@ -1,12 +1,12 @@
 export default {
   expo: {
-    name: "driver",
+    name: "JK Taxi Driver",
     slug: "driver",
     version: "1.0.0",
     orientation: "portrait",
     icon: "./assets/images/icon.png",
-    scheme: "driver",
-    userInterfaceStyle: "automatic",
+    scheme: "jktaxidriver",
+    userInterfaceStyle: "light",
     newArchEnabled: true,
     splash: {
       image: "./assets/images/splash-icon.png",
@@ -16,7 +16,9 @@ export default {
     ios: {
       supportsTablet: true,
       bundleIdentifier: "com.jktaxi.driver",
+      buildNumber: "1",
       infoPlist: {
+        CFBundleDisplayName: "JK Taxi Driver",
         NSLocationWhenInUseUsageDescription:
           "JK Taxi Driver needs your location to show your position to riders and navigate to pickups.",
         NSLocationAlwaysAndWhenInUseUsageDescription:
@@ -34,6 +36,7 @@ export default {
       edgeToEdgeEnabled: true,
       predictiveBackGestureEnabled: false,
       package: "com.jktaxi.driver",
+      versionCode: 1,
       permissions: [
         "ACCESS_COARSE_LOCATION",
         "ACCESS_FINE_LOCATION",
@@ -52,6 +55,10 @@ export default {
     web: {
       output: "static",
       favicon: "./assets/images/favicon.png",
+      name: "JK Taxi Driver",
+      shortName: "JK Driver",
+      themeColor: "#0B3A8A",
+      backgroundColor: "#0B3A8A",
     },
     plugins: [
       "expo-router",
@@ -59,12 +66,13 @@ export default {
         "expo-splash-screen",
         {
           image: "./assets/images/splash-icon.png",
-          imageWidth: 288,
+          // Android 12+ circular mask — padding baked into splash-icon.png
+          imageWidth: 260,
           resizeMode: "contain",
           backgroundColor: "#0B3A8A",
           dark: {
             image: "./assets/images/splash-icon.png",
-            imageWidth: 288,
+            imageWidth: 260,
             resizeMode: "contain",
             backgroundColor: "#0B3A8A",
           },

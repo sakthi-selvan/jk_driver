@@ -88,6 +88,14 @@ export default function ProfileScreen() {
                 .filter(Boolean)
                 .join(' · ') || 'Complete your profile'}
             </Text>
+            <Text style={styles.profileStats}>
+              {driver?.average_rating != null
+                ? `★ ${Number(driver.average_rating).toFixed(1)}`
+                : '★ New'}
+              {' · '}
+              {driver?.total_rides ?? 0}{' '}
+              {(driver?.total_rides ?? 0) === 1 ? 'trip' : 'trips'}
+            </Text>
           </View>
           <TouchableOpacity style={styles.editButton} onPress={() => router.push('/edit-profile')}>
             <Ionicons name="create-outline" size={20} color={Colors.primary} />
@@ -230,6 +238,7 @@ const styles = StyleSheet.create({
   profileName: { fontSize: FontSizes.lg, fontWeight: FontWeights.bold, color: Colors.ink },
   profilePhone: { fontSize: FontSizes.sm, color: Colors.inkSecondary, marginTop: 2 },
   profileMeta: { fontSize: FontSizes.xs, color: Colors.inkMuted, marginTop: 4 },
+  profileStats: { fontSize: FontSizes.sm, color: Colors.inkSecondary, marginTop: 4 },
   editButton: {
     width: 40,
     height: 40,

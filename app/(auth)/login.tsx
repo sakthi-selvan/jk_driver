@@ -24,7 +24,8 @@ import { validatePhone } from '../../src/utils/validation';
 
 const SUPPORT_PHONE = '9876543210';
 const SUPPORT_EMAIL = 'support@jktaxitamilnadu.com';
-const LOGO_ASPECT = 1024 / 469;
+/** Driver header logo (brand mark + DRIVER badge) */
+const LOGO_ASPECT = 1024 / 520;
 
 export default function LoginScreen() {
   const [phone, setPhone] = useState('');
@@ -35,7 +36,7 @@ export default function LoginScreen() {
   const { height: windowHeight, width: windowWidth } = useWindowDimensions();
 
   // Compact logo on short screens / when keyboard leaves less room
-  const logoWidth = Math.min(windowWidth * 0.42, windowHeight < 700 ? 140 : 168);
+  const logoWidth = Math.min(windowWidth * 0.48, windowHeight < 700 ? 150 : 180);
   const logoHeight = logoWidth / LOGO_ASPECT;
 
   const {
@@ -169,11 +170,10 @@ export default function LoginScreen() {
         >
           <View style={styles.header}>
             <Image
-              source={require('../../assets/images/jk_taxi_logo.png')}
-              style={{ width: logoWidth, height: logoHeight, marginBottom: 8 }}
+              source={require('../../assets/images/jk_taxi_driver_logo.png')}
+              style={{ width: logoWidth, height: logoHeight, marginBottom: 6 }}
               resizeMode="contain"
             />
-            <Text style={styles.title}>JK Taxi Driver</Text>
             <Text style={styles.subtitle}>
               {otpSent ? 'Enter the OTP sent to your phone' : 'Sign in with your phone number'}
             </Text>
@@ -260,12 +260,6 @@ const styles = StyleSheet.create({
   header: {
     alignItems: 'center',
     marginBottom: Spacing.md,
-  },
-  title: {
-    fontSize: FontSizes.xxl,
-    fontWeight: FontWeights.bold,
-    color: Colors.text,
-    marginBottom: 4,
   },
   subtitle: {
     fontSize: FontSizes.sm,

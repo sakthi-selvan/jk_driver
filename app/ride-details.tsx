@@ -20,6 +20,7 @@ import { Card } from '../src/components/common/Card';
 import { driverEnhancedApi } from '../src/api/driver-enhanced';
 import { useAuthStore } from '../src/store/authStore';
 import { EnhancedRide } from '../src/types/enhanced';
+import { sameRideUi } from '../src/utils/stableUpdate';
 import { Colors, Spacing, FontSizes, FontWeights, BorderRadius } from '../src/constants/theme';
 
 export default function RideDetailsScreen() {
@@ -37,16 +38,17 @@ export default function RideDetailsScreen() {
   useEffect(() => {
     let cancelled = false;
 
-    const loadRideDetails = async () => {
+    const loadRideDetails = async (soft = false) => {
       if (!rideId) {
         setNotFound(true);
         setIsLoading(false);
         return;
       }
       try {
+        if (!soft) setIsLoading(true);
         const data = await driverEnhancedApi.getRideDetails(rideId);
         if (cancelled) return;
-        setRide(data);
+        setRide((prev) => (sameRideUi(prev, data) ? prev : data));
         setNotFound(false);
         // Stop polling once ride is finished
         if (data.status === 'completed' || data.status === 'cancelled') {
@@ -72,12 +74,11 @@ export default function RideDetailsScreen() {
       }
     };
 
-    setIsLoading(true);
     setNotFound(false);
-    loadRideDetails();
+    loadRideDetails(false);
     startLocationTracking();
 
-    pollRef.current = setInterval(loadRideDetails, 10000);
+    pollRef.current = setInterval(() => loadRideDetails(true), 10000);
     return () => {
       cancelled = true;
       if (pollRef.current) clearInterval(pollRef.current);

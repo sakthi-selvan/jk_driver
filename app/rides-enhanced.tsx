@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -21,6 +21,7 @@ import { Card } from '../src/components/common/Card';
 import { Colors, Spacing, FontSizes, FontWeights } from '../src/constants/theme';
 import { EnhancedRide } from '../src/types/enhanced';
 import { driverLocationService } from '../src/services/locationTracking';
+import { sameRideListUi, sameRideUi } from '../src/utils/stableUpdate';
 
 export default function RidesEnhancedScreen() {
   const [availableRides, setAvailableRides] = useState<EnhancedRide[]>([]);
@@ -28,12 +29,59 @@ export default function RidesEnhancedScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [showOTPModal, setShowOTPModal] = useState(false);
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
+  const hasLoadedOnceRef = useRef(false);
+  const loadInFlight = useRef(false);
+
+  const setActiveRideStable = useCallback((next: EnhancedRide | null) => {
+    setActiveRide((prev) => (sameRideUi(prev, next) ? prev : next));
+  }, []);
+
+  const setAvailableRidesStable = useCallback((next: EnhancedRide[]) => {
+    setAvailableRides((prev) => (sameRideListUi(prev, next) ? prev : next));
+  }, []);
+
+  const loadRides = useCallback(async (opts?: { soft?: boolean; pull?: boolean }) => {
+    const soft = opts?.soft ?? hasLoadedOnceRef.current;
+    const pull = opts?.pull ?? false;
+    if (loadInFlight.current) return;
+    loadInFlight.current = true;
+
+    try {
+      if (!soft && !pull) setIsLoading(true);
+
+      try {
+        const active = await driverEnhancedApi.getActiveRide();
+        setActiveRideStable(active);
+        setAvailableRidesStable([]);
+      } catch (error: any) {
+        if (error.response?.status === 404) {
+          setActiveRideStable(null);
+          try {
+            const available = await driverEnhancedApi.getAvailableRides();
+            setAvailableRidesStable(Array.isArray(available) ? available : []);
+          } catch {
+            // Keep previous list on background failure — don't flash empty
+            if (!soft) setAvailableRidesStable([]);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error loading rides:', error);
+    } finally {
+      loadInFlight.current = false;
+      hasLoadedOnceRef.current = true;
+      setHasLoadedOnce(true);
+      setIsLoading(false);
+      setIsRefreshing(false);
+    }
+  }, [setActiveRideStable, setAvailableRidesStable]);
 
   useEffect(() => {
-    loadRides();
-    const interval = setInterval(loadRides, 10000);
+    loadRides({ soft: false });
+    const interval = setInterval(() => loadRides({ soft: true }), 10000);
     return () => clearInterval(interval);
-  }, []);
+  }, [loadRides]);
 
   // Push location to server when ride is active
   useEffect(() => {
@@ -47,34 +95,9 @@ export default function RidesEnhancedScreen() {
     driverLocationService.setActiveRideId(null);
   }, [activeRide?.id, activeRide?.status]);
 
-  const loadRides = async () => {
-    try {
-      setIsLoading(true);
-
-      // Try to get active ride first
-      try {
-        const active = await driverEnhancedApi.getActiveRide();
-        setActiveRide(active);
-        setAvailableRides([]);
-      } catch (error: any) {
-        // No active ride, get available rides
-        if (error.response?.status === 404) {
-          const available = await driverEnhancedApi.getAvailableRides();
-          setAvailableRides(available);
-          setActiveRide(null);
-        }
-      }
-    } catch (error) {
-      console.error('Error loading rides:', error);
-    } finally {
-      setIsLoading(false);
-      setIsRefreshing(false);
-    }
-  };
-
   const handleRefresh = () => {
     setIsRefreshing(true);
-    loadRides();
+    loadRides({ soft: true, pull: true });
   };
 
   const handleAcceptRide = async (rideId: string) => {
@@ -91,7 +114,8 @@ export default function RidesEnhancedScreen() {
   const handleRejectRide = async (rideId: string) => {
     try {
       await driverEnhancedApi.rejectRide(rideId);
-      loadRides();
+      setAvailableRides((prev) => prev.filter((r) => r.id !== rideId));
+      loadRides({ soft: true });
     } catch (error: any) {
       Alert.alert('Error', formatApiError(error, 'Failed to reject ride'));
     }
@@ -103,7 +127,7 @@ export default function RidesEnhancedScreen() {
 
   const handleOTPVerified = async () => {
     setShowOTPModal(false);
-    loadRides();
+    loadRides({ soft: true });
     Alert.alert('OTP Verified', 'You can now start the ride');
   };
 
@@ -153,7 +177,7 @@ export default function RidesEnhancedScreen() {
             try {
               await driverEnhancedApi.completeRide(activeRide.id);
               Alert.alert('Success', 'Ride completed!');
-              loadRides();
+              loadRides({ soft: true });
             } catch (error: any) {
               Alert.alert('Error', formatApiError(error, 'Failed to complete ride'));
             }
@@ -163,7 +187,7 @@ export default function RidesEnhancedScreen() {
     );
   };
 
-  if (isLoading && !isRefreshing) {
+  if (isLoading && !hasLoadedOnce) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.centerContent}>

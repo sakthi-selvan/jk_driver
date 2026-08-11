@@ -12,7 +12,7 @@ interface RideState {
   error: string | null;
 
   // Actions
-  loadAvailableRides: () => Promise<void>;
+  loadAvailableRides: (opts?: { silent?: boolean }) => Promise<void>;
   acceptRide: (rideId: string) => Promise<void>;
   rejectRide: (rideId: string) => Promise<void>;
   startRide: (rideId: string) => Promise<void>;
@@ -30,14 +30,23 @@ export const useRideStore = create<RideState>((set, get) => ({
   isLoading: false,
   error: null,
 
-  loadAvailableRides: async () => {
+  loadAvailableRides: async (opts?: { silent?: boolean }) => {
+    const silent = opts?.silent ?? get().availableRides.length > 0;
     try {
-      set({ isLoading: true, error: null });
+      if (!silent) set({ isLoading: true, error: null });
       const rides = await ridesApi.getAvailableRides();
-      set({ availableRides: rides, isLoading: false });
+      const prev = get().availableRides;
+      const unchanged =
+        prev.length === rides.length &&
+        prev.every((r, i) => String(r.id) === String(rides[i]?.id) && r.status === rides[i]?.status);
+      if (!unchanged) {
+        set({ availableRides: rides, isLoading: false });
+      } else if (!silent || get().isLoading) {
+        set({ isLoading: false });
+      }
     } catch (error: any) {
       const errorMsg = formatApiError(error, 'Failed to load available rides');
-      set({ error: errorMsg, isLoading: false, availableRides: [] });
+      set({ error: errorMsg, isLoading: false, ...(silent ? {} : { availableRides: [] }) });
     }
   },
 

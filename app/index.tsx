@@ -25,6 +25,7 @@ import { PaymentCollectionModal } from '../src/components/PaymentCollectionModal
 import { ActiveRideBottomSheet } from '../src/components/ActiveRideBottomSheet';
 import { Colors, Spacing, FontSizes, FontWeights, BorderRadius } from '../src/constants/theme';
 import { EnhancedRide } from '../src/types/enhanced';
+import { sameRideListUi, sameRideUi } from '../src/utils/stableUpdate';
 import { MAPBOX_ACCESS_TOKEN, MAP_STYLES, ANIMATION_DURATION } from '../src/config/mapbox-config';
 import { initMapbox, mapboxTokenPresent } from '../src/config/initMapbox';
 import { ensureMapboxTokenAfterAuth } from '../src/services/mapboxAuth';
@@ -82,6 +83,7 @@ export default function HomeScreen() {
   const rejectedRideIdsRef = useRef<Set<string>>(new Set());
   const fetchingRouteRef = useRef(false);
   const lastRerouteAtRef = useRef(0);
+  const loadRidesInFlight = useRef(false);
 
   // Initialize location; sync online status only when logged in
   useEffect(() => {
@@ -302,23 +304,26 @@ export default function HomeScreen() {
   };
 
   const loadRides = async () => {
+    if (loadRidesInFlight.current) return;
+    loadRidesInFlight.current = true;
     try {
       const active = await driverEnhancedApi.getActiveRide();
-      setActiveRide(active);
-      setAvailableRides([]);
+      setActiveRide((prev) => (sameRideUi(prev, active) ? prev : active));
+      setAvailableRides((prev) => (prev.length === 0 ? prev : []));
     } catch (e: any) {
       if (e.response?.status === 404) {
-        setActiveRide(null);
+        setActiveRide((prev) => (prev == null ? prev : null));
         // No active ride - fetch available rides (exclude locally rejected ones)
         try {
           const available = await driverEnhancedApi.getAvailableRides();
           const filtered = available.filter((r: any) => !rejectedRideIdsRef.current.has(r.id));
-          setAvailableRides(filtered);
+          setAvailableRides((prev) => (sameRideListUi(prev, filtered) ? prev : filtered));
         } catch {
-          setAvailableRides([]);
+          // Keep previous list on soft poll failure — avoid empty flash
         }
       }
     } finally {
+      loadRidesInFlight.current = false;
       setIsLoading(false);
     }
   };
@@ -820,6 +825,14 @@ export default function HomeScreen() {
                     <Text style={styles.customerMeta}>
                       {activeRide.payment_method === 'cash' ? 'Cash' : 'Online'} • ₹{Math.round(activeRide.fare)}
                     </Text>
+                    <Text style={styles.driverStatsLine}>
+                      {activeRide.driver_average_rating != null
+                        ? `★ ${activeRide.driver_average_rating.toFixed(1)}`
+                        : '★ New'}
+                      {' · '}
+                      {activeRide.driver_total_rides ?? 0}{' '}
+                      {(activeRide.driver_total_rides ?? 0) === 1 ? 'trip' : 'trips'}
+                    </Text>
                   </View>
                   <TouchableOpacity style={styles.callBtn} onPress={handleCallCustomer}>
                     <Ionicons name="call" size={18} color="#FFFFFF" />
@@ -1135,6 +1148,7 @@ const styles = StyleSheet.create({
   customerInfo: { flex: 1, marginLeft: 10 },
   customerName: { fontSize: 15, fontWeight: '700', color: '#000', marginBottom: 2 },
   customerMeta: { fontSize: 12, color: '#666' },
+  driverStatsLine: { fontSize: 12, color: '#666', marginTop: 2 },
   callBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: '#4CAF50', alignItems: 'center', justifyContent: 'center', marginRight: 8 },
   navBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: Colors.primary, alignItems: 'center', justifyContent: 'center' },
 

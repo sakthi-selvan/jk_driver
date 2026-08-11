@@ -12,6 +12,9 @@ export interface Driver {
   is_verified: boolean;
   is_active: boolean;
   created_at: string;
+  total_rides?: number;
+  average_rating?: number | null;
+  rating_count?: number;
 }
 
 // Auth types
