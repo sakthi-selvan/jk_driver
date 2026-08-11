@@ -8,6 +8,11 @@ export default {
     scheme: "driver",
     userInterfaceStyle: "automatic",
     newArchEnabled: true,
+    splash: {
+      image: "./assets/images/splash-icon.png",
+      resizeMode: "contain",
+      backgroundColor: "#0B3A8A",
+    },
     ios: {
       supportsTablet: true,
       bundleIdentifier: "com.jktaxi.driver",
@@ -54,12 +59,12 @@ export default {
         "expo-splash-screen",
         {
           image: "./assets/images/splash-icon.png",
-          imageWidth: 220,
+          imageWidth: 288,
           resizeMode: "contain",
           backgroundColor: "#0B3A8A",
           dark: {
             image: "./assets/images/splash-icon.png",
-            imageWidth: 220,
+            imageWidth: 288,
             resizeMode: "contain",
             backgroundColor: "#0B3A8A",
           },

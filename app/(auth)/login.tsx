@@ -246,8 +246,9 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.md,
   },
   logo: {
-    width: 240,
-    height: 110,
+    width: '82%',
+    maxWidth: 300,
+    aspectRatio: 1024 / 469,
   },
   title: {
     fontSize: FontSizes.xxxl,
