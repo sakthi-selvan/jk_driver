@@ -128,6 +128,11 @@ class ApiClient {
         const isMustBeOnline = error.response?.status === 400 &&
                                error.config?.url?.includes('/available') &&
                                JSON.stringify(error.response?.data).includes('must be online');
+        const responseDetail = JSON.stringify(error.response?.data || '');
+        const isDropoffTooFar =
+          error.response?.status === 400 &&
+          error.config?.url?.includes('/complete') &&
+          responseDetail.toLowerCase().includes('away from drop-off');
         // FastAPI HTTPBearer returns 403 (not 401) when Authorization header is missing
         const detail = (error.response?.data as any)?.detail;
         const isUnauthenticated =
@@ -136,7 +141,13 @@ class ApiClient {
             (detail === 'Not authenticated' ||
               (typeof detail === 'string' && detail.toLowerCase().includes('not authenticated'))));
 
-        if (!isNoActiveRide && !isCancelledRide && !isMustBeOnline && !isUnauthenticated) {
+        if (
+          !isNoActiveRide &&
+          !isCancelledRide &&
+          !isMustBeOnline &&
+          !isUnauthenticated &&
+          !isDropoffTooFar
+        ) {
           console.error('❌ [DRIVER API ERROR]', error.message);
           console.error('📍 [URL]', error.config?.url);
           if (error.response) {
@@ -151,6 +162,8 @@ class ApiClient {
           console.log('ℹ️  [CANCELLED RIDE] Ride was cancelled and no longer exists (this is normal)');
         } else if (isMustBeOnline) {
           console.log('ℹ️  [OFFLINE] Driver is offline, cannot see available rides (this is normal)');
+        } else if (isDropoffTooFar) {
+          console.log('ℹ️  [COMPLETE] Driver is still away from drop-off (expected until arrival)');
         }
 
         return Promise.reject(error);

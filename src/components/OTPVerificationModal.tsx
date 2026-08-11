@@ -16,7 +16,7 @@ import { driverEnhancedApi } from '../api/driver-enhanced';
 interface OTPVerificationModalProps {
   visible: boolean;
   rideId: string;
-  onVerified: () => void;
+  onVerified: (ride?: any) => void;
   onClose: () => void;
 }
 
@@ -41,13 +41,13 @@ export const OTPVerificationModal: React.FC<OTPVerificationModalProps> = ({
 
     try {
       setIsLoading(true);
-      await driverEnhancedApi.verifyOTP(rideId, otp);
+      const ride = await driverEnhancedApi.verifyOTP(rideId, otp);
 
       setOtp('');
       Alert.alert(
         'OTP Verified! ✅',
         'The OTP is correct. You can now start the ride.',
-        [{ text: 'OK', onPress: onVerified }]
+        [{ text: 'OK', onPress: () => onVerified(ride) }]
       );
     } catch (error: any) {
       let errorMessage = 'Invalid OTP. Please try again.';

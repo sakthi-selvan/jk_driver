@@ -120,13 +120,29 @@ export default function HomeScreen() {
             event === 'ride_cancelled' ||
             event === 'ride_reassigned' ||
             event === 'ride_taken' ||
-            event === 'offer_expired'
+            event === 'offer_expired' ||
+            event === 'otp_verified' ||
+            event === 'ride_started' ||
+            event === 'ride_completed'
           ) {
             if (event === 'ride_taken' || event === 'offer_expired') {
               const takenId = data?.ride_id;
               if (takenId) {
                 setAvailableRides((prev) => prev.filter((r) => String(r.id) !== String(takenId)));
               }
+            }
+            if (event === 'otp_verified' || event === 'ride_started') {
+              setActiveRide((prev) => {
+                if (!prev || (data?.ride_id && String(prev.id) !== String(data.ride_id))) {
+                  return prev;
+                }
+                return {
+                  ...prev,
+                  ...(event === 'otp_verified' ? { otp_verified: true } : {}),
+                  ...(event === 'ride_started' ? { status: 'started' } : {}),
+                  ...(data?.status ? { status: String(data.status) } : {}),
+                };
+              });
             }
             loadRides();
           }
@@ -377,24 +393,47 @@ export default function HomeScreen() {
     );
   };
 
+  const startingRideRef = useRef(false);
+
   const handleVerifyOTP = () => setShowOTPModal(true);
 
-  const handleOTPVerified = () => {
+  const handleOTPVerified = (ride?: EnhancedRide) => {
     setShowOTPModal(false);
-    loadRides();
+    if (ride) {
+      setActiveRide(ride);
+    } else {
+      loadRides();
+    }
   };
 
   const handleStartRide = async () => {
-    if (!activeRide) return;
+    if (!activeRide || startingRideRef.current) return;
+    if (activeRide.status === 'started') {
+      return;
+    }
     if (!activeRide.otp_verified) {
       setShowOTPModal(true);
       return;
     }
+    startingRideRef.current = true;
     try {
       const ride = await driverEnhancedApi.startRide(activeRide.id);
       setActiveRide(ride);
     } catch (e: any) {
+      const detail = String(e?.response?.data?.detail || '').toLowerCase();
+      // Already started (double tap / race) — sync UI from server
+      if (detail.includes('status: started') || detail.includes('already started')) {
+        try {
+          const active = await driverEnhancedApi.getActiveRide();
+          setActiveRide(active);
+          return;
+        } catch {
+          // fall through to alert
+        }
+      }
       Alert.alert('Error', formatApiError(e, 'Failed to start ride'));
+    } finally {
+      startingRideRef.current = false;
     }
   };
 
@@ -413,16 +452,59 @@ export default function HomeScreen() {
 
   const handleCompleteRide = async () => {
     if (!activeRide) return;
-    Alert.alert('Complete Ride', 'Have you reached the destination?', [
+    Alert.alert(
+      'Complete Ride',
+      'Reached the drop-off? If the customer changed plans, you can still end the ride.',
+      [
       { text: 'Not Yet', style: 'cancel' },
-      { text: 'Yes, Complete', onPress: async () => {
-        try {
-          await driverEnhancedApi.completeRide(activeRide.id);
-          showPaymentCollection(activeRide.id, activeRide.fare);
-        } catch (e: any) {
-          Alert.alert('Cannot Complete', formatApiError(e, 'Failed to complete'));
-        }
-      }},
+      {
+        text: 'Yes, Complete',
+        onPress: async () => {
+          try {
+            // Fresh GPS so the drop-off distance check is accurate
+            try {
+              await driverLocationService.pushOnce();
+            } catch {
+              // continue — server may still have a recent fix
+            }
+            await driverEnhancedApi.completeRide(activeRide.id, {
+              latitude: driverLoc.latitude,
+              longitude: driverLoc.longitude,
+            });
+            showPaymentCollection(activeRide.id, activeRide.fare);
+          } catch (e: any) {
+            const detail = formatApiError(e, 'Failed to complete');
+            const isTooFar =
+              String(e?.response?.data?.detail || '')
+                .toLowerCase()
+                .includes('away from drop-off');
+            if (isTooFar) {
+              Alert.alert('Too far from drop-off', detail, [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Navigate', onPress: handleNavigate },
+                {
+                  text: 'Complete anyway',
+                  style: 'destructive',
+                  onPress: async () => {
+                    try {
+                      await driverEnhancedApi.completeRide(activeRide.id, {
+                        force: true,
+                        latitude: driverLoc.latitude,
+                        longitude: driverLoc.longitude,
+                      });
+                      showPaymentCollection(activeRide.id, activeRide.fare);
+                    } catch (forceErr: any) {
+                      Alert.alert('Cannot Complete', formatApiError(forceErr, 'Force complete failed'));
+                    }
+                  },
+                },
+              ]);
+              return;
+            }
+            Alert.alert('Cannot Complete', detail);
+          }
+        },
+      },
     ]);
   };
 
@@ -694,110 +776,112 @@ export default function HomeScreen() {
       )}
 
 
-      {/* Active ride bottom sheet — drag down to peek, up to expand */}
+      {/* Active ride bottom sheet — summary + End Ride always visible */}
       {activeRide && (
         <ActiveRideBottomSheet
           bottomInset={insets.bottom}
           onVisibleHeightChange={setSheetHeight}
-        >
-            {/* Route Info - Distance & Time */}
-            {liveRouteInfo && (
-              <View style={styles.rideRouteInfo}>
-                <Ionicons name="navigate" size={16} color="#1A73E8" />
-                <Text style={styles.rideRouteText}>
-                  {liveRouteInfo.distance.toFixed(1)} km • {Math.ceil(liveRouteInfo.duration)} min
-                </Text>
-                <Text style={styles.rideRouteTo}>
-                  {activeRide.status === 'accepted' ? 'to pickup' : 'to dropoff'}
-                </Text>
-              </View>
-            )}
-
-            {/* Status banner */}
-            <View style={styles.statusBanner}>
-              <View style={[styles.statusDot, {
-                backgroundColor: activeRide.status === 'accepted' ? '#3B82F6' : '#8B5CF6'
-              }]} />
-              <Text style={styles.statusText}>
-                {activeRide.status === 'accepted'
-                  ? (activeRide.otp_verified ? 'Ready to Start' : 'Heading to Pickup')
-                  : 'Trip In Progress'}
-              </Text>
-            </View>
-
-            {/* Customer info with name and call button */}
-            <View style={styles.customerSection}>
-              <View style={styles.customerRow}>
-                <View style={styles.customerAvatar}>
-                  <Ionicons name="person" size={18} color="#FFF" />
-                </View>
-                <View style={styles.customerInfo}>
-                  <Text style={styles.customerName}>
-                    {activeRide.booking_for_self === false && activeRide.passenger_name
-                      ? activeRide.passenger_name
-                      : (activeRide as any).customer_name || activeRide.customer?.name || 'Customer'}
+          summary={
+            <>
+              {liveRouteInfo && (
+                <View style={styles.rideRouteInfo}>
+                  <Ionicons name="navigate" size={16} color="#1A73E8" />
+                  <Text style={styles.rideRouteText}>
+                    {liveRouteInfo.distance.toFixed(1)} km • {Math.ceil(liveRouteInfo.duration)} min
                   </Text>
-                  <Text style={styles.customerMeta}>
-                    {activeRide.payment_method === 'cash' ? 'Cash' : 'Online'} • ₹{Math.round(activeRide.fare)}
+                  <Text style={styles.rideRouteTo}>
+                    {activeRide.status === 'accepted' ? 'to pickup' : 'to dropoff'}
                   </Text>
                 </View>
-                <TouchableOpacity style={styles.callBtn} onPress={handleCallCustomer}>
-                  <Ionicons name="call" size={18} color="#FFFFFF" />
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.navBtn} onPress={handleNavigate}>
-                  <Ionicons name="navigate" size={18} color="#FFFFFF" />
-                </TouchableOpacity>
-              </View>
-            </View>
+              )}
 
-            {/* Location summary */}
+              <View style={styles.statusBanner}>
+                <View style={[styles.statusDot, {
+                  backgroundColor: activeRide.status === 'accepted' ? '#3B82F6' : '#8B5CF6'
+                }]} />
+                <Text style={styles.statusText}>
+                  {activeRide.status === 'accepted'
+                    ? (activeRide.otp_verified ? 'Ready to Start' : 'Heading to Pickup')
+                    : 'Trip In Progress'}
+                </Text>
+              </View>
+
+              <View style={styles.customerSection}>
+                <View style={styles.customerRow}>
+                  <View style={styles.customerAvatar}>
+                    <Ionicons name="person" size={18} color="#FFF" />
+                  </View>
+                  <View style={styles.customerInfo}>
+                    <Text style={styles.customerName}>
+                      {activeRide.booking_for_self === false && activeRide.passenger_name
+                        ? activeRide.passenger_name
+                        : (activeRide as any).customer_name || activeRide.customer?.name || 'Customer'}
+                    </Text>
+                    <Text style={styles.customerMeta}>
+                      {activeRide.payment_method === 'cash' ? 'Cash' : 'Online'} • ₹{Math.round(activeRide.fare)}
+                    </Text>
+                  </View>
+                  <TouchableOpacity style={styles.callBtn} onPress={handleCallCustomer}>
+                    <Ionicons name="call" size={18} color="#FFFFFF" />
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.navBtn} onPress={handleNavigate}>
+                    <Ionicons name="navigate" size={18} color="#FFFFFF" />
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </>
+          }
+          details={
             <View style={styles.activeLocations}>
               {activeRide.status === 'accepted' && (
                 <View style={styles.activeLocRow}>
                   <View style={[styles.locDot, { backgroundColor: '#4CAF50' }]} />
-                  <Text style={styles.activeLocText} numberOfLines={1}>{String(activeRide.pickup_location)}</Text>
+                  <Text style={styles.activeLocText} numberOfLines={2}>{String(activeRide.pickup_location)}</Text>
                 </View>
               )}
-              {activeRide.status === 'started' && activeRide.dropoff_location && (
+              {activeRide.dropoff_location ? (
                 <View style={styles.activeLocRow}>
                   <View style={[styles.locDot, { backgroundColor: '#F44336' }]} />
-                  <Text style={styles.activeLocText} numberOfLines={1}>{String(activeRide.dropoff_location)}</Text>
+                  <Text style={styles.activeLocText} numberOfLines={2}>{String(activeRide.dropoff_location)}</Text>
                 </View>
-              )}
+              ) : null}
             </View>
-
-            {/* Action buttons */}
-            {activeRide.status === 'accepted' && !activeRide.otp_verified && (
-              <>
-                <TouchableOpacity style={styles.otpBtn} onPress={handleVerifyOTP}>
-                  <Ionicons name="shield-checkmark" size={18} color="#FFF" />
-                  <Text style={styles.otpBtnText}>Verify OTP</Text>
+          }
+          actions={
+            <>
+              {activeRide.status === 'accepted' && !activeRide.otp_verified && (
+                <>
+                  <TouchableOpacity style={styles.otpBtn} onPress={handleVerifyOTP}>
+                    <Ionicons name="shield-checkmark" size={18} color="#FFF" />
+                    <Text style={styles.otpBtnText}>Verify OTP</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.cancelBtn} onPress={handleCancelRide}>
+                    <Ionicons name="close-circle" size={18} color="#EF4444" />
+                    <Text style={styles.cancelBtnText}>Cancel Ride</Text>
+                  </TouchableOpacity>
+                </>
+              )}
+              {activeRide.status === 'accepted' && activeRide.otp_verified && (
+                <>
+                  <TouchableOpacity style={styles.startBtn} onPress={handleStartRide}>
+                    <Ionicons name="play-circle" size={18} color="#FFF" />
+                    <Text style={styles.startBtnText}>Start Ride</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.cancelBtn} onPress={handleCancelRide}>
+                    <Ionicons name="close-circle" size={18} color="#EF4444" />
+                    <Text style={styles.cancelBtnText}>Cancel Ride</Text>
+                  </TouchableOpacity>
+                </>
+              )}
+              {activeRide.status === 'started' && (
+                <TouchableOpacity style={styles.completeBtn} onPress={handleCompleteRide}>
+                  <Ionicons name="checkmark-circle" size={18} color="#FFF" />
+                  <Text style={styles.completeBtnText}>End Ride</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.cancelBtn} onPress={handleCancelRide}>
-                  <Ionicons name="close-circle" size={18} color="#EF4444" />
-                  <Text style={styles.cancelBtnText}>Cancel Ride</Text>
-                </TouchableOpacity>
-              </>
-            )}
-            {activeRide.status === 'accepted' && activeRide.otp_verified && (
-              <>
-                <TouchableOpacity style={styles.startBtn} onPress={handleStartRide}>
-                  <Ionicons name="play-circle" size={18} color="#FFF" />
-                  <Text style={styles.startBtnText}>Start Ride</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.cancelBtn} onPress={handleCancelRide}>
-                  <Ionicons name="close-circle" size={18} color="#EF4444" />
-                  <Text style={styles.cancelBtnText}>Cancel Ride</Text>
-                </TouchableOpacity>
-              </>
-            )}
-            {activeRide.status === 'started' && (
-              <TouchableOpacity style={styles.completeBtn} onPress={handleCompleteRide}>
-                <Ionicons name="checkmark-circle" size={18} color="#FFF" />
-                <Text style={styles.completeBtnText}>End Ride</Text>
-              </TouchableOpacity>
-            )}
-        </ActiveRideBottomSheet>
+              )}
+            </>
+          }
+        />
       )}
 
       {/* Available Ride Card - shown when no active ride */}
@@ -1045,7 +1129,7 @@ const styles = StyleSheet.create({
   statusText: { fontSize: 13, fontWeight: '600', color: '#333' },
 
   // Customer section
-  customerSection: { marginBottom: 10 },
+  customerSection: { marginBottom: 8 },
   customerRow: { flexDirection: 'row', alignItems: 'center' },
   customerAvatar: { width: 38, height: 38, borderRadius: 19, backgroundColor: Colors.primary, alignItems: 'center', justifyContent: 'center' },
   customerInfo: { flex: 1, marginLeft: 10 },
@@ -1054,18 +1138,18 @@ const styles = StyleSheet.create({
   callBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: '#4CAF50', alignItems: 'center', justifyContent: 'center', marginRight: 8 },
   navBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: Colors.primary, alignItems: 'center', justifyContent: 'center' },
 
-  activeLocations: { marginBottom: 10 },
-  activeLocRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
+  activeLocations: { marginBottom: 0 },
+  activeLocRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
   activeLocText: { fontSize: 12, color: '#333', flex: 1, marginLeft: 8 },
 
   // Action buttons
-  otpBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#F59E0B', borderRadius: 10, paddingVertical: 12, gap: 6, marginBottom: 6 },
+  otpBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#F59E0B', borderRadius: 10, paddingVertical: 14, gap: 6, marginBottom: 8 },
   otpBtnText: { color: '#FFF', fontSize: 15, fontWeight: '700' },
-  startBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#3B82F6', borderRadius: 10, paddingVertical: 12, gap: 6, marginBottom: 6 },
+  startBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#3B82F6', borderRadius: 10, paddingVertical: 14, gap: 6, marginBottom: 8 },
   startBtnText: { color: '#FFF', fontSize: 15, fontWeight: '700' },
-  completeBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#10B981', borderRadius: 10, paddingVertical: 12, gap: 6 },
+  completeBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#10B981', borderRadius: 10, paddingVertical: 14, gap: 6 },
   completeBtnText: { color: '#FFF', fontSize: 15, fontWeight: '700' },
-  cancelBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFFFFF', borderRadius: 10, paddingVertical: 12, gap: 6, borderWidth: 1.5, borderColor: '#EF4444' },
+  cancelBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFFFFF', borderRadius: 10, paddingVertical: 14, gap: 6, borderWidth: 1.5, borderColor: '#EF4444' },
   cancelBtnText: { color: '#EF4444', fontSize: 15, fontWeight: '700' },
 
   rideLocations: { marginBottom: 10 },

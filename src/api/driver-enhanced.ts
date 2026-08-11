@@ -52,9 +52,22 @@ export const driverEnhancedApi = {
     return response.data;
   },
 
-  // Complete ride
-  completeRide: async (rideId: string): Promise<EnhancedRide> => {
-    const response = await apiClient.post<EnhancedRide>(`/api/v2/driver/rides/${rideId}/complete`);
+  // Complete ride (optional force + latest GPS for drop-off check)
+  completeRide: async (
+    rideId: string,
+    opts?: { force?: boolean; latitude?: number; longitude?: number }
+  ): Promise<EnhancedRide> => {
+    const response = await apiClient.post<EnhancedRide>(
+      `/api/v2/driver/rides/${rideId}/complete`,
+      undefined,
+      {
+        params: {
+          ...(opts?.force ? { force: true } : {}),
+          ...(opts?.latitude != null ? { latitude: opts.latitude } : {}),
+          ...(opts?.longitude != null ? { longitude: opts.longitude } : {}),
+        },
+      }
+    );
     return response.data;
   },
 

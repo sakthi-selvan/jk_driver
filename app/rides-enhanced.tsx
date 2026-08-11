@@ -107,6 +107,10 @@ export default function RidesEnhancedScreen() {
   const handleStartRide = async () => {
     if (!activeRide) return;
 
+    if (activeRide.status === 'started') {
+      return;
+    }
+
     if (!activeRide.otp_verified) {
       Alert.alert('OTP Required', 'Please verify OTP before starting the ride');
       setShowOTPModal(true);
@@ -118,6 +122,16 @@ export default function RidesEnhancedScreen() {
       setActiveRide(ride);
       Alert.alert('Success', 'Ride started!');
     } catch (error: any) {
+      const detail = String(error?.response?.data?.detail || '').toLowerCase();
+      if (detail.includes('status: started')) {
+        try {
+          const active = await driverEnhancedApi.getActiveRide();
+          setActiveRide(active);
+          return;
+        } catch {
+          // fall through
+        }
+      }
       Alert.alert('Error', formatApiError(error, 'Failed to start ride'));
     }
   };
