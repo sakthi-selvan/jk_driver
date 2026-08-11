@@ -7,9 +7,12 @@ import {
   RefreshControl,
   Alert,
   ActivityIndicator,
+  TouchableOpacity,
 } from 'react-native';
 import { formatApiError } from '../src/utils/apiError';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { router } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { driverEnhancedApi } from '../src/api/driver-enhanced';
 import { OTPVerificationModal } from '../src/components/OTPVerificationModal';
 import { EnhancedRideCard } from '../src/components/EnhancedRideCard';
@@ -174,12 +177,18 @@ export default function RidesEnhancedScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>
-          {activeRide ? 'Active Ride' : 'Available Rides'}
-        </Text>
-        {availableRides.length > 0 && (
-          <Text style={styles.headerSubtitle}>{availableRides.length} rides available</Text>
-        )}
+        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} hitSlop={8}>
+          <Ionicons name="arrow-back" size={22} color={Colors.text} />
+        </TouchableOpacity>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.headerTitle}>
+            {activeRide ? 'Active Ride' : 'Available Rides'}
+          </Text>
+          {availableRides.length > 0 && (
+            <Text style={styles.headerSubtitle}>{availableRides.length} rides available</Text>
+          )}
+        </View>
+        <View style={{ width: 40 }} />
       </View>
 
       <ScrollView
@@ -292,12 +301,22 @@ const styles = StyleSheet.create({
     marginTop: Spacing.md,
   },
   header: {
-    padding: Spacing.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.md,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
+    gap: 8,
+  },
+  backBtn: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   headerTitle: {
-    fontSize: FontSizes.xxl,
+    fontSize: FontSizes.xl,
     fontWeight: FontWeights.bold,
     color: Colors.text,
   },

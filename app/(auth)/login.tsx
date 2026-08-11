@@ -9,6 +9,8 @@ import {
   Linking,
   TextInput,
   Image,
+  ScrollView,
+  useWindowDimensions,
 } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -22,6 +24,7 @@ import { validatePhone } from '../../src/utils/validation';
 
 const SUPPORT_PHONE = '9876543210';
 const SUPPORT_EMAIL = 'support@jktaxitamilnadu.com';
+const LOGO_ASPECT = 1024 / 469;
 
 export default function LoginScreen() {
   const [phone, setPhone] = useState('');
@@ -29,6 +32,11 @@ export default function LoginScreen() {
   const [phoneError, setPhoneError] = useState('');
   const [showPendingScreen, setShowPendingScreen] = useState(false);
   const otpRefs = useRef<(TextInput | null)[]>([]);
+  const { height: windowHeight, width: windowWidth } = useWindowDimensions();
+
+  // Compact logo on short screens / when keyboard leaves less room
+  const logoWidth = Math.min(windowWidth * 0.42, windowHeight < 700 ? 140 : 168);
+  const logoHeight = logoWidth / LOGO_ASPECT;
 
   const {
     sendOTP,
@@ -147,20 +155,24 @@ export default function LoginScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.keyboardView}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
       >
-        <View style={styles.content}>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          bounces={false}
+        >
           <View style={styles.header}>
-            <View style={styles.logoContainer}>
-              <Image
-                source={require('../../assets/images/jk_taxi_logo.png')}
-                style={styles.logo}
-                resizeMode="contain"
-              />
-            </View>
+            <Image
+              source={require('../../assets/images/jk_taxi_logo.png')}
+              style={{ width: logoWidth, height: logoHeight, marginBottom: 8 }}
+              resizeMode="contain"
+            />
             <Text style={styles.title}>JK Taxi Driver</Text>
             <Text style={styles.subtitle}>
               {otpSent ? 'Enter the OTP sent to your phone' : 'Sign in with your phone number'}
@@ -226,8 +238,10 @@ export default function LoginScreen() {
             )}
           </Card>
 
-          <Text style={styles.hint}>New captain? Verify OTP, then complete your profile & documents.</Text>
-        </View>
+          <Text style={styles.hint}>
+            New captain? Verify OTP, then complete your profile & documents.
+          </Text>
+        </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -236,66 +250,61 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   keyboardView: { flex: 1 },
-  content: {
-    flex: 1,
+  scrollContent: {
+    flexGrow: 1,
     paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
+    paddingTop: Spacing.sm,
+    paddingBottom: Spacing.lg,
     justifyContent: 'center',
   },
-  header: { alignItems: 'center', marginBottom: Spacing.lg },
-  logoContainer: {
+  header: {
     alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: Spacing.sm,
-  },
-  logo: {
-    width: '70%',
-    maxWidth: 240,
-    aspectRatio: 1024 / 469,
+    marginBottom: Spacing.md,
   },
   title: {
-    fontSize: FontSizes.xxxl,
+    fontSize: FontSizes.xxl,
     fontWeight: FontWeights.bold,
     color: Colors.text,
-    marginBottom: Spacing.xs,
+    marginBottom: 4,
   },
   subtitle: {
-    fontSize: FontSizes.md,
+    fontSize: FontSizes.sm,
     color: Colors.textSecondary,
     textAlign: 'center',
-    paddingHorizontal: Spacing.md,
+    paddingHorizontal: Spacing.sm,
+    lineHeight: 20,
   },
-  formCard: { marginBottom: Spacing.lg },
-  loginButton: { marginTop: Spacing.md },
+  formCard: { marginBottom: Spacing.md },
+  loginButton: { marginTop: Spacing.sm },
   errorText: {
     color: Colors.error || '#EF4444',
     fontSize: FontSizes.sm,
     marginBottom: Spacing.sm,
     textAlign: 'center',
   },
-  phoneDisplay: { alignItems: 'center', marginBottom: Spacing.md },
+  phoneDisplay: { alignItems: 'center', marginBottom: Spacing.sm },
   phoneLabel: { fontSize: FontSizes.sm, color: Colors.textSecondary },
   phoneNumber: {
     fontSize: FontSizes.lg,
     fontWeight: FontWeights.bold,
     color: Colors.text,
-    marginVertical: 4,
+    marginVertical: 2,
   },
   otpContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: 12,
-    marginBottom: Spacing.md,
+    gap: 10,
+    marginBottom: Spacing.sm,
   },
   otpInput: {
-    width: 52,
-    height: 56,
+    width: 48,
+    height: 52,
     borderRadius: 12,
     borderWidth: 1.5,
     borderColor: '#E0E0E0',
     backgroundColor: '#FAFAFA',
     textAlign: 'center',
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: '700',
     color: Colors.text,
   },
@@ -307,7 +316,8 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontSize: FontSizes.sm,
     color: Colors.textSecondary,
-    lineHeight: 20,
+    lineHeight: 18,
+    paddingHorizontal: Spacing.sm,
   },
   pendingContainer: { flex: 1, padding: Spacing.xl, justifyContent: 'center' },
   pendingIconBox: {

@@ -62,6 +62,7 @@ export default function RootLayout() {
           <Stack.Screen name="contact-support" />
           <Stack.Screen name="terms" />
           <Stack.Screen name="rides-enhanced" />
+          <Stack.Screen name="ride-history" />
           <Stack.Screen name="wallet" />
           <Stack.Screen name="ride-details" />
           <Stack.Screen name="ride-ui-preview" />

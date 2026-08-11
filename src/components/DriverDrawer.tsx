@@ -1,9 +1,10 @@
 import React, { useRef } from 'react';
 import { View, StyleSheet, Animated, TouchableOpacity, ScrollView, Text, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { usePathname, router } from 'expo-router';
 import { useAuthStore } from '../store/authStore';
 import { Colors, Spacing, FontSizes, FontWeights, BorderRadius } from '../constants/theme';
+import { navigateIfNeeded } from '../utils/navigation';
 
 interface DriverDrawerProps {
   isOpen: boolean;
@@ -13,6 +14,7 @@ interface DriverDrawerProps {
 
 export const DriverDrawer: React.FC<DriverDrawerProps> = ({ isOpen, onClose, isOnline }) => {
   const { driver, logout } = useAuthStore();
+  const pathname = usePathname();
   const slideAnim = useRef(new Animated.Value(320)).current;
 
   React.useEffect(() => {
@@ -23,6 +25,11 @@ export const DriverDrawer: React.FC<DriverDrawerProps> = ({ isOpen, onClose, isO
       friction: 11,
     }).start();
   }, [isOpen]);
+
+  const go = (href: string) => {
+    onClose();
+    navigateIfNeeded(pathname, href);
+  };
 
   const handleLogout = async () => {
     onClose();
@@ -88,13 +95,7 @@ export const DriverDrawer: React.FC<DriverDrawerProps> = ({ isOpen, onClose, isO
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>MAIN MENU</Text>
 
-            <TouchableOpacity
-              style={styles.menuItem}
-              onPress={() => {
-                onClose();
-                router.push('/');
-              }}
-            >
+            <TouchableOpacity style={styles.menuItem} onPress={() => go('/')}>
               <View style={styles.menuItemIconContainer}>
                 <Ionicons name="home" size={24} color={Colors.primary} />
               </View>
@@ -102,27 +103,23 @@ export const DriverDrawer: React.FC<DriverDrawerProps> = ({ isOpen, onClose, isO
               <Ionicons name="chevron-forward" size={20} color="#999" />
             </TouchableOpacity>
 
-            <TouchableOpacity
-              style={styles.menuItem}
-              onPress={() => {
-                onClose();
-                router.push('/rides-enhanced');
-              }}
-            >
+            <TouchableOpacity style={styles.menuItem} onPress={() => go('/rides-enhanced')}>
               <View style={styles.menuItemIconContainer}>
-                <Ionicons name="list" size={24} color={Colors.primary} />
+                <Ionicons name="car-sport" size={24} color={Colors.primary} />
               </View>
-              <Text style={styles.menuItemText}>My Rides</Text>
+              <Text style={styles.menuItemText}>Available Rides</Text>
               <Ionicons name="chevron-forward" size={20} color="#999" />
             </TouchableOpacity>
 
-            <TouchableOpacity
-              style={styles.menuItem}
-              onPress={() => {
-                onClose();
-                router.push('/profile');
-              }}
-            >
+            <TouchableOpacity style={styles.menuItem} onPress={() => go('/ride-history')}>
+              <View style={styles.menuItemIconContainer}>
+                <Ionicons name="time" size={24} color={Colors.primary} />
+              </View>
+              <Text style={styles.menuItemText}>Ride History</Text>
+              <Ionicons name="chevron-forward" size={20} color="#999" />
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.menuItem} onPress={() => go('/profile')}>
               <View style={styles.menuItemIconContainer}>
                 <Ionicons name="person" size={24} color={Colors.primary} />
               </View>
@@ -134,13 +131,7 @@ export const DriverDrawer: React.FC<DriverDrawerProps> = ({ isOpen, onClose, isO
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>OTHER</Text>
 
-            <TouchableOpacity
-              style={styles.menuItem}
-              onPress={() => {
-                onClose();
-                router.push('/wallet');
-              }}
-            >
+            <TouchableOpacity style={styles.menuItem} onPress={() => go('/wallet')}>
               <View style={styles.menuItemIconContainer}>
                 <Ionicons name="wallet" size={24} color={Colors.primary} />
               </View>
@@ -148,13 +139,7 @@ export const DriverDrawer: React.FC<DriverDrawerProps> = ({ isOpen, onClose, isO
               <Ionicons name="chevron-forward" size={20} color="#999" />
             </TouchableOpacity>
 
-            <TouchableOpacity
-              style={styles.menuItem}
-              onPress={() => {
-                onClose();
-                router.push('/help-center');
-              }}
-            >
+            <TouchableOpacity style={styles.menuItem} onPress={() => go('/help-center')}>
               <View style={styles.menuItemIconContainer}>
                 <Ionicons name="help-circle" size={24} color={Colors.primary} />
               </View>
@@ -162,13 +147,7 @@ export const DriverDrawer: React.FC<DriverDrawerProps> = ({ isOpen, onClose, isO
               <Ionicons name="chevron-forward" size={20} color="#999" />
             </TouchableOpacity>
 
-            <TouchableOpacity
-              style={styles.menuItem}
-              onPress={() => {
-                onClose();
-                router.push('/notifications');
-              }}
-            >
+            <TouchableOpacity style={styles.menuItem} onPress={() => go('/notifications')}>
               <View style={styles.menuItemIconContainer}>
                 <Ionicons name="settings" size={24} color={Colors.primary} />
               </View>
