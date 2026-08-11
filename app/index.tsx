@@ -26,7 +26,8 @@ import { PaymentCollectionModal } from '../src/components/PaymentCollectionModal
 import { Colors, Spacing, FontSizes, FontWeights, BorderRadius } from '../src/constants/theme';
 import { EnhancedRide } from '../src/types/enhanced';
 import { MAPBOX_ACCESS_TOKEN, MAP_STYLES, ANIMATION_DURATION } from '../src/config/mapbox-config';
-import { initMapbox } from '../src/config/initMapbox';
+import { initMapbox, mapboxTokenPresent } from '../src/config/initMapbox';
+import { ensureMapboxTokenAfterAuth } from '../src/services/mapboxAuth';
 import { driverLocationService } from '../src/services/locationTracking';
 import { rideRealtime } from '../src/services/realtime';
 import { RouteProgressLayers } from '../src/components/map/RouteProgressLayers';
@@ -48,6 +49,7 @@ export default function HomeScreen() {
   const insets = useSafeAreaInsets();
 
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [mapReady, setMapReady] = useState(mapboxTokenPresent());
 
   const [activeRide, setActiveRide] = useState<EnhancedRide | null>(null);
   const [availableRides, setAvailableRides] = useState<EnhancedRide[]>([]);
@@ -74,10 +76,23 @@ export default function HomeScreen() {
 
   // Initialize location; sync online status only when logged in
   useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!mapboxTokenPresent()) {
+        const ok = await ensureMapboxTokenAfterAuth();
+        if (!cancelled && ok) setMapReady(true);
+      } else {
+        initMapbox();
+        setMapReady(true);
+      }
+    })();
     initLocation();
     if (useAuthStore.getState().accessToken || useAuthStore.getState().isAuthenticated) {
       fetchCurrentStatus();
     }
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Ride polling and location push when online
@@ -498,6 +513,7 @@ export default function HomeScreen() {
   return (
     <View style={styles.container}>
       {/* Map - Google Maps style */}
+      {mapReady ? (
       <Mapbox.MapView
         style={styles.map}
         styleURL="mapbox://styles/mapbox/streets-v12"
@@ -555,6 +571,11 @@ export default function HomeScreen() {
           </Mapbox.PointAnnotation>
         )}
       </Mapbox.MapView>
+      ) : (
+        <View style={[styles.map, { alignItems: 'center', justifyContent: 'center', backgroundColor: '#E2E8F0' }]}>
+          <Text style={{ color: '#64748B' }}>Loading map…</Text>
+        </View>
+      )}
 
       {/* Map Control Buttons - Right side */}
       <View style={[styles.mapControls, { bottom: activeRide ? 300 : 80 }]}>

@@ -1,14 +1,23 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { geoApi } from '../api/geo';
-import { applyMapboxAccessToken, mapboxTokenPresent } from '../config/initMapbox';
+import {
+  applyMapboxAccessToken,
+  initMapbox,
+  mapboxTokenPresent,
+  mapboxTokenConfigured,
+} from '../config/initMapbox';
 
 const CACHE_KEY = 'mapbox_public_token';
 
 export async function ensureMapboxTokenAfterAuth(): Promise<boolean> {
+  if (mapboxTokenConfigured()) {
+    initMapbox();
+  }
+
   try {
     const cached = await AsyncStorage.getItem(CACHE_KEY);
     if (cached && cached.startsWith('pk.')) {
-      applyMapboxAccessToken(cached);
+      await applyMapboxAccessToken(cached);
     }
   } catch {
     // ignore
@@ -17,13 +26,15 @@ export async function ensureMapboxTokenAfterAuth(): Promise<boolean> {
   try {
     const { access_token } = await geoApi.getMapboxToken();
     if (access_token?.startsWith('pk.')) {
-      applyMapboxAccessToken(access_token);
-      try {
-        await AsyncStorage.setItem(CACHE_KEY, access_token);
-      } catch {
-        // ignore
+      const ok = await applyMapboxAccessToken(access_token);
+      if (ok) {
+        try {
+          await AsyncStorage.setItem(CACHE_KEY, access_token);
+        } catch {
+          // ignore
+        }
+        return true;
       }
-      return true;
     }
   } catch (e) {
     console.warn('[Mapbox] failed to load token from backend', e);
