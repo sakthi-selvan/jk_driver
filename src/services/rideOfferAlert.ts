@@ -1,10 +1,12 @@
 /**
  * Ride-offer alarm: looping sound + vibration when a new exclusive offer arrives.
  * Errors are swallowed so audio failures never break dispatch UI.
+ *
+ * expo-audio is NEVER imported at top level — a stale native binary without
+ * ExpoAudio would crash the whole route tree on load.
  */
 import { Vibration, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { createAudioPlayer, setAudioModeAsync, setIsAudioActiveAsync } from 'expo-audio';
 
 const PREFS_KEY = 'jk_driver_notification_prefs';
 const ALARM_SOURCE = require('../../assets/sounds/ride_offer_alarm.wav');
@@ -14,10 +16,67 @@ type Prefs = {
   rideUpdates?: boolean;
 };
 
-let player: ReturnType<typeof createAudioPlayer> | null = null;
+/** Minimal surface we use from expo-audio (avoids a static import). */
+type AudioPlayer = {
+  loop: boolean;
+  volume: number;
+  play: () => void;
+  pause: () => void;
+  seekTo: (seconds: number) => Promise<void>;
+  release: () => void;
+};
+
+type AudioModule = {
+  createAudioPlayer: (
+    source: number | string | { uri: string },
+    options?: { updateInterval?: number },
+  ) => AudioPlayer;
+  setAudioModeAsync: (mode: Record<string, unknown>) => Promise<void>;
+  setIsAudioActiveAsync: (active: boolean) => Promise<void>;
+};
+
+let audioMod: AudioModule | null | undefined;
+let player: AudioPlayer | null = null;
 let modeReady = false;
 let activeRideId: string | null = null;
 let starting = false;
+let nativeAudioWarned = false;
+
+function loadAudioModule(): AudioModule | null {
+  if (audioMod !== undefined) return audioMod;
+  try {
+    // Soft probe — do not throw / redbox when native module is absent
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const core = require('expo-modules-core') as {
+      requireOptionalNativeModule?: (name: string) => unknown;
+    };
+    const probe = core.requireOptionalNativeModule?.('ExpoAudio');
+    if (!probe) {
+      audioMod = null;
+      if (!nativeAudioWarned) {
+        nativeAudioWarned = true;
+        console.warn(
+          '[rideOfferAlert] ExpoAudio not in this binary — vibration only. ' +
+            'Rebuild: eas build -p android --profile development',
+        );
+      }
+      return null;
+    }
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    audioMod = require('expo-audio') as AudioModule;
+    return audioMod;
+  } catch (e) {
+    audioMod = null;
+    if (!nativeAudioWarned) {
+      nativeAudioWarned = true;
+      console.warn(
+        '[rideOfferAlert] expo-audio unavailable — vibration only.',
+        e,
+      );
+    }
+    return null;
+  }
+}
 
 async function prefsAllowAlarm(): Promise<boolean> {
   try {
@@ -34,9 +93,11 @@ async function prefsAllowAlarm(): Promise<boolean> {
 
 async function ensureAudioMode(): Promise<boolean> {
   if (modeReady) return true;
+  const mod = loadAudioModule();
+  if (!mod) return false;
   try {
-    await setIsAudioActiveAsync(true);
-    await setAudioModeAsync({
+    await mod.setIsAudioActiveAsync(true);
+    await mod.setAudioModeAsync({
       playsInSilentMode: true,
       shouldPlayInBackground: true,
       interruptionMode: 'duckOthers',
@@ -52,7 +113,6 @@ async function ensureAudioMode(): Promise<boolean> {
 
 function startVibration() {
   try {
-    // Pattern: wait, buzz, wait, buzz… (Android); iOS uses fixed vibration
     if (Platform.OS === 'android') {
       Vibration.vibrate([0, 500, 250, 500, 250, 700], true);
     } else {
@@ -71,10 +131,12 @@ function stopVibration() {
   }
 }
 
-async function ensurePlayer() {
+async function ensurePlayer(): Promise<AudioPlayer | null> {
   if (player) return player;
+  const mod = loadAudioModule();
+  if (!mod) return null;
   try {
-    player = createAudioPlayer(ALARM_SOURCE, { updateInterval: 500 });
+    player = mod.createAudioPlayer(ALARM_SOURCE, { updateInterval: 500 });
     player.loop = true;
     player.volume = 1.0;
     return player;
