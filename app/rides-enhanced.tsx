@@ -77,17 +77,14 @@ export default function RidesEnhancedScreen() {
                 rideOfferAlert.playForOffer(id).catch(() => undefined);
               }
             }
-            if (next.length > 0) {
-              const nextIds = new Set(next.map((r) => String(r.id)));
-              for (const id of [...alarmedOfferIdsRef.current]) {
-                if (!nextIds.has(id)) alarmedOfferIdsRef.current.delete(id);
-              }
+            const nextIds = new Set(next.map((r) => String(r.id)));
+            for (const id of [...alarmedOfferIdsRef.current]) {
+              if (!nextIds.has(id)) alarmedOfferIdsRef.current.delete(id);
             }
-            setAvailableRides((prev) => {
-              if (sameRideListUi(prev, next)) return prev;
-              if (next.length > 0) return next;
-              return prev;
-            });
+            if (next.length === 0) {
+              rideOfferAlert.stop().catch(() => undefined);
+            }
+            setAvailableRides((prev) => (sameRideListUi(prev, next) ? prev : next));
           } catch {
             if (!soft) setAvailableRidesStable([]);
           }
@@ -230,11 +227,17 @@ export default function RidesEnhancedScreen() {
     try {
       alarmedOfferIdsRef.current.delete(String(rideId));
       rideOfferAlert.stop().catch(() => undefined);
-      await driverEnhancedApi.rejectRide(rideId);
+      await driverEnhancedApi.declineRide(rideId);
       setAvailableRides((prev) => prev.filter((r) => r.id !== rideId));
       loadRides({ soft: true });
     } catch (error: any) {
-      Alert.alert('Error', formatApiError(error, 'Failed to reject ride'));
+      const code = error?.response?.status;
+      if (code === 409 || code === 404 || code === 410) {
+        setAvailableRides((prev) => prev.filter((r) => r.id !== rideId));
+        return;
+      }
+      Alert.alert('Error', formatApiError(error, 'Failed to decline ride'));
+      loadRides({ soft: true });
     }
   };
 

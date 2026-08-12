@@ -418,20 +418,15 @@ export default function HomeScreen() {
               rideOfferAlert.playForOffer(id).catch(() => undefined);
             }
           }
-          // Only prune when API returns a non-empty authoritative list
-          if (filtered.length > 0) {
-            const nextIds = new Set(filtered.map((r: any) => String(r.id)));
-            for (const id of [...alarmedOfferIdsRef.current]) {
-              if (!nextIds.has(id)) alarmedOfferIdsRef.current.delete(id);
-            }
+          const nextIds = new Set(filtered.map((r: any) => String(r.id)));
+          for (const id of [...alarmedOfferIdsRef.current]) {
+            if (!nextIds.has(id)) alarmedOfferIdsRef.current.delete(id);
           }
-          setAvailableRides((prev) => {
-            // Prefer API list, but keep optimistic WS stubs until API includes them
-            if (sameRideListUi(prev, filtered)) return prev;
-            if (filtered.length > 0) return filtered;
-            // API empty — keep any optimistic offers already on screen
-            return prev;
-          });
+          if (filtered.length === 0) {
+            rideOfferAlert.stop().catch(() => undefined);
+          }
+          // Authoritative empty clears optimistic WS stubs (avoids dead Accept UI)
+          setAvailableRides((prev) => (sameRideListUi(prev, filtered) ? prev : filtered));
         } catch {
           // Keep previous list on soft poll failure — avoid empty flash
         }
@@ -464,17 +459,21 @@ export default function HomeScreen() {
   };
 
   const handleRejectRide = async (rideId: string) => {
-    // Track locally so it doesn't reappear on next poll
-    rejectedRideIdsRef.current.add(rideId);
     alarmedOfferIdsRef.current.delete(String(rideId));
-    setAvailableRides(prev => prev.filter(r => r.id !== rideId));
+    setAvailableRides((prev) => prev.filter((r) => r.id !== rideId));
     rideOfferAlert.stop().catch(() => undefined);
 
-    // Tell backend so it won't show this ride to this driver again
     try {
       await driverEnhancedApi.declineRide(rideId);
-    } catch {
-      // Ignore errors - local tracking is enough
+      // Only permanently exclude after backend records the pass
+      rejectedRideIdsRef.current.add(rideId);
+    } catch (e: any) {
+      const code = e?.response?.status;
+      // Already reassigned / gone — safe to keep excluded
+      if (code === 409 || code === 404 || code === 410) {
+        rejectedRideIdsRef.current.add(rideId);
+      }
+      // Network/other errors: allow poll to restore if still exclusively ours
     }
   };
 
