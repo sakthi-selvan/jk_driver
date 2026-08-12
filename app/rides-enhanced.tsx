@@ -23,6 +23,7 @@ import { EnhancedRide } from '../src/types/enhanced';
 import { driverLocationService } from '../src/services/locationTracking';
 import { sameRideListUi, sameRideUi } from '../src/utils/stableUpdate';
 import { rideRealtime } from '../src/services/realtime';
+import { rideOfferAlert } from '../src/services/rideOfferAlert';
 import { useAuthStore } from '../src/store/authStore';
 
 export default function RidesEnhancedScreen() {
@@ -35,6 +36,7 @@ export default function RidesEnhancedScreen() {
   const hasLoadedOnceRef = useRef(false);
   const loadInFlight = useRef(false);
   const loadQueued = useRef(false);
+  const alarmedOfferIdsRef = useRef<Set<string>>(new Set());
 
   const setActiveRideStable = useCallback((next: EnhancedRide | null) => {
     setActiveRide((prev) => (sameRideUi(prev, next) ? prev : next));
@@ -60,12 +62,27 @@ export default function RidesEnhancedScreen() {
         const active = await driverEnhancedApi.getActiveRide();
         setActiveRideStable(active);
         setAvailableRidesStable([]);
+        alarmedOfferIdsRef.current.clear();
+        rideOfferAlert.stop().catch(() => undefined);
       } catch (error: any) {
         if (error.response?.status === 404) {
           setActiveRideStable(null);
           try {
             const available = await driverEnhancedApi.getAvailableRides();
             const next = Array.isArray(available) ? available : [];
+            for (const r of next) {
+              const id = String(r.id);
+              if (!alarmedOfferIdsRef.current.has(id)) {
+                alarmedOfferIdsRef.current.add(id);
+                rideOfferAlert.playForOffer(id).catch(() => undefined);
+              }
+            }
+            if (next.length > 0) {
+              const nextIds = new Set(next.map((r) => String(r.id)));
+              for (const id of [...alarmedOfferIdsRef.current]) {
+                if (!nextIds.has(id)) alarmedOfferIdsRef.current.delete(id);
+              }
+            }
             setAvailableRides((prev) => {
               if (sameRideListUi(prev, next)) return prev;
               if (next.length > 0) return next;
@@ -106,6 +123,11 @@ export default function RidesEnhancedScreen() {
             const offeredTo = data?.offered_driver_id;
             if (!offeredTo || !myId || String(offeredTo) === String(myId)) {
               const id = String(data.ride_id || data.id);
+              const isNew = !alarmedOfferIdsRef.current.has(id);
+              if (isNew) {
+                alarmedOfferIdsRef.current.add(id);
+                rideOfferAlert.playForOffer(id).catch(() => undefined);
+              }
               setAvailableRides((prev) => {
                 if (prev.some((r) => String(r.id) === id)) return prev;
                 const stub = {
@@ -157,7 +179,9 @@ export default function RidesEnhancedScreen() {
           if (event === 'ride_taken' || event === 'offer_expired') {
             const takenId = data?.ride_id;
             if (takenId) {
+              alarmedOfferIdsRef.current.delete(String(takenId));
               setAvailableRides((prev) => prev.filter((r) => String(r.id) !== String(takenId)));
+              rideOfferAlert.stop().catch(() => undefined);
             }
           }
           loadRides({ soft: true });
@@ -168,6 +192,7 @@ export default function RidesEnhancedScreen() {
     return () => {
       clearInterval(interval);
       unsub?.();
+      rideOfferAlert.stop().catch(() => undefined);
     };
   }, [loadRides]);
 
@@ -190,6 +215,8 @@ export default function RidesEnhancedScreen() {
 
   const handleAcceptRide = async (rideId: string) => {
     try {
+      await rideOfferAlert.stop().catch(() => undefined);
+      alarmedOfferIdsRef.current.clear();
       const ride = await driverEnhancedApi.acceptRide(rideId);
       setActiveRide(ride);
       setAvailableRides([]);
@@ -201,6 +228,8 @@ export default function RidesEnhancedScreen() {
 
   const handleRejectRide = async (rideId: string) => {
     try {
+      alarmedOfferIdsRef.current.delete(String(rideId));
+      rideOfferAlert.stop().catch(() => undefined);
       await driverEnhancedApi.rejectRide(rideId);
       setAvailableRides((prev) => prev.filter((r) => r.id !== rideId));
       loadRides({ soft: true });

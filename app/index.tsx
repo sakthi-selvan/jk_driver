@@ -31,6 +31,7 @@ import { initMapbox, mapboxTokenPresent } from '../src/config/initMapbox';
 import { ensureMapboxTokenAfterAuth } from '../src/services/mapboxAuth';
 import { driverLocationService } from '../src/services/locationTracking';
 import { rideRealtime } from '../src/services/realtime';
+import { rideOfferAlert } from '../src/services/rideOfferAlert';
 import { RouteProgressLayers } from '../src/components/map/RouteProgressLayers';
 import { normalizeFleetCategory } from '../src/components/map/VehicleMarker';
 import {
@@ -81,6 +82,8 @@ export default function HomeScreen() {
   const locationWatchRef = useRef<Location.LocationSubscription | null>(null);
   const hasInitializedCameraRef = useRef(false);
   const rejectedRideIdsRef = useRef<Set<string>>(new Set());
+  /** Offer ids we've already alarmed for (WS + poll); avoids re-sounding on refresh. */
+  const alarmedOfferIdsRef = useRef<Set<string>>(new Set());
   const fetchingRouteRef = useRef(false);
   const lastRerouteAtRef = useRef(0);
   const loadRidesInFlight = useRef(false);
@@ -187,6 +190,11 @@ export default function HomeScreen() {
               if (!offeredTo || !myId || String(offeredTo) === String(myId)) {
                 const stub = offerFromEvent(data);
                 if (stub && !rejectedRideIdsRef.current.has(stub.id)) {
+                  const isNew = !alarmedOfferIdsRef.current.has(String(stub.id));
+                  if (isNew) {
+                    alarmedOfferIdsRef.current.add(String(stub.id));
+                    rideOfferAlert.playForOffer(stub.id).catch(() => undefined);
+                  }
                   setAvailableRides((prev) => {
                     if (prev.some((r) => String(r.id) === String(stub.id))) {
                       return prev.map((r) =>
@@ -201,7 +209,9 @@ export default function HomeScreen() {
             if (event === 'ride_taken' || event === 'offer_expired') {
               const takenId = data?.ride_id;
               if (takenId) {
+                alarmedOfferIdsRef.current.delete(String(takenId));
                 setAvailableRides((prev) => prev.filter((r) => String(r.id) !== String(takenId)));
+                rideOfferAlert.stop().catch(() => undefined);
               }
             }
             if (event === 'otp_verified' || event === 'ride_started') {
@@ -228,16 +238,20 @@ export default function HomeScreen() {
           unsub();
           rideRealtime.disconnect();
           stopLocationPush();
+          rideOfferAlert.stop().catch(() => undefined);
         };
       }
       const interval = setInterval(loadRides, 3000);
       return () => {
         clearInterval(interval);
         stopLocationPush();
+        rideOfferAlert.stop().catch(() => undefined);
       };
     } else {
       setActiveRide(null);
       setAvailableRides([]);
+      alarmedOfferIdsRef.current.clear();
+      rideOfferAlert.stop().catch(() => undefined);
       stopLocationPush();
       rideRealtime.disconnect();
     }
@@ -387,6 +401,8 @@ export default function HomeScreen() {
       const active = await driverEnhancedApi.getActiveRide();
       setActiveRide((prev) => (sameRideUi(prev, active) ? prev : active));
       setAvailableRides((prev) => (prev.length === 0 ? prev : []));
+      alarmedOfferIdsRef.current.clear();
+      rideOfferAlert.stop().catch(() => undefined);
     } catch (e: any) {
       if (e.response?.status === 404) {
         setActiveRide((prev) => (prev == null ? prev : null));
@@ -394,6 +410,21 @@ export default function HomeScreen() {
         try {
           const available = await driverEnhancedApi.getAvailableRides();
           const filtered = available.filter((r: any) => !rejectedRideIdsRef.current.has(r.id));
+          // Alarm for offers discovered via poll (WS miss / cold start)
+          for (const r of filtered) {
+            const id = String(r.id);
+            if (!alarmedOfferIdsRef.current.has(id)) {
+              alarmedOfferIdsRef.current.add(id);
+              rideOfferAlert.playForOffer(id).catch(() => undefined);
+            }
+          }
+          // Only prune when API returns a non-empty authoritative list
+          if (filtered.length > 0) {
+            const nextIds = new Set(filtered.map((r: any) => String(r.id)));
+            for (const id of [...alarmedOfferIdsRef.current]) {
+              if (!nextIds.has(id)) alarmedOfferIdsRef.current.delete(id);
+            }
+          }
           setAvailableRides((prev) => {
             // Prefer API list, but keep optimistic WS stubs until API includes them
             if (sameRideListUi(prev, filtered)) return prev;
@@ -417,6 +448,8 @@ export default function HomeScreen() {
 
   const handleAcceptRide = async (rideId: string) => {
     try {
+      await rideOfferAlert.stop().catch(() => undefined);
+      alarmedOfferIdsRef.current.clear();
       const ride = await driverEnhancedApi.acceptRide(rideId);
       setActiveRide(ride);
       setAvailableRides([]);
@@ -433,7 +466,9 @@ export default function HomeScreen() {
   const handleRejectRide = async (rideId: string) => {
     // Track locally so it doesn't reappear on next poll
     rejectedRideIdsRef.current.add(rideId);
+    alarmedOfferIdsRef.current.delete(String(rideId));
     setAvailableRides(prev => prev.filter(r => r.id !== rideId));
+    rideOfferAlert.stop().catch(() => undefined);
 
     // Tell backend so it won't show this ride to this driver again
     try {

@@ -63,6 +63,14 @@ export default {
     plugins: [
       "expo-router",
       [
+        "expo-audio",
+        {
+          // Playback only — no microphone for ride-offer alarm
+          recordAudioAndroid: false,
+          microphonePermission: false,
+        },
+      ],
+      [
         "expo-splash-screen",
         {
           image: "./assets/images/splash-icon.png",
