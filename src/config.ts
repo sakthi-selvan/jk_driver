@@ -33,6 +33,5 @@ export const API_CONFIG = {
 // Debug: Log the resolved API URL
 console.log('📡 [DRIVER CONFIG] API_URL resolved to:', API_URL);
 
-// For local testing, update .env with:
-// EXPO_PUBLIC_API_URL=http://YOUR_LOCAL_IP:8000
-// Then restart: npm start --clear
+// For local dev only — use your machine's LAN IP, not localhost, on a physical device.
+// EXPO_PUBLIC_API_URL=http://192.168.x.x:8000
