@@ -53,12 +53,13 @@ export const PaymentCollectionModal: React.FC<PaymentCollectionModalProps> = ({
 
       Alert.alert('Payment Collected', `₹${Math.round(fare)} received via online payment!`);
       onComplete();
-    } catch (error: any) {
+    except (error: any) {
       if (error?.code === 'PAYMENT_CANCELLED') {
         setIsProcessing(false);
         return;
       }
-      Alert.alert('Payment Failed', error?.description || error?.message || 'Please try again or collect cash');
+      const msg = formatApiError(error, 'Online payment failed. Collect cash instead.');
+      Alert.alert('Payment Failed', msg);
       setIsProcessing(false);
     }
   };
