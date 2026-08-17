@@ -14,7 +14,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import * as Location from 'expo-location';
-import Mapbox, { UserTrackingMode } from '@rnmapbox/maps';
+import Mapbox from '@rnmapbox/maps';
 import { useAuthStore } from '../src/store/authStore';
 import { useStatusStore } from '../src/store/statusStore';
 import { driverEnhancedApi } from '../src/api/driver-enhanced';
@@ -40,6 +40,7 @@ import {
   splitRouteProgress,
   type LngLat,
 } from '../src/utils/routeProgress';
+import { buildDriverHomeCameraProps, idleCameraStop } from '../src/utils/mapboxCamera';
 initMapbox();
 
 const { width } = Dimensions.get('window');
@@ -744,6 +745,17 @@ export default function HomeScreen() {
 
   const inNavMode = !!(activeRide && (activeRide.status === 'accepted' || activeRide.status === 'started'));
   const fleetCategory = normalizeFleetCategory((driver as any)?.vehicle_type);
+
+  // Leaving nav mode (End Ride / cancel / payment done): never pass followPadding=undefined on Android.
+  useEffect(() => {
+    if (inNavMode) return;
+    setFollowUser(true);
+    const timer = setTimeout(() => {
+      cameraRef.current?.setCamera(idleCameraStop(driverLoc.longitude, driverLoc.latitude));
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [inNavMode, driverLoc.longitude, driverLoc.latitude]);
+
   const puckKey =
     fleetCategory === 'bike' ||
     fleetCategory === 'auto' ||
@@ -771,28 +783,13 @@ export default function HomeScreen() {
         onTouchStart={() => setFollowUser(false)}
       >
         <Mapbox.Camera
+          key={inNavMode ? `nav-${activeRide?.id ?? 'ride'}` : 'idle'}
           ref={cameraRef}
           zoomLevel={inNavMode ? 18 : 16}
           centerCoordinate={[driverLoc.longitude, driverLoc.latitude]}
           animationDuration={800}
           followUserLocation={followUser}
-          followUserMode={
-            followUser && inNavMode
-              ? UserTrackingMode.FollowWithCourse
-              : UserTrackingMode.Follow
-          }
-          followZoomLevel={followUser && inNavMode ? 18 : 15}
-          followPitch={followUser && inNavMode ? 60 : 0}
-          followPadding={
-            inNavMode
-              ? {
-                  paddingTop: 80,
-                  paddingBottom: Math.max(sheetHeight, 120) + 24,
-                  paddingLeft: 40,
-                  paddingRight: 40,
-                }
-              : undefined
-          }
+          {...buildDriverHomeCameraProps({ inNavMode, followUser, sheetHeight })}
         />
 
         {/* Fleet car puck that rotates with course (Google Maps–style) */}
