@@ -4,7 +4,7 @@ import { Ride, DriverStatusUpdate, Earnings } from '../types';
 export const ridesApi = {
   // Update driver status (online/offline)
   updateStatus: async (data: DriverStatusUpdate): Promise<any> => {
-    const response = await apiClient.put('/api/driver/status', data);
+    const response = await apiClient.put('/api/v2/driver/status', data);
     return response.data;
   },
 
