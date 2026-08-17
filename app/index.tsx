@@ -941,7 +941,7 @@ export default function HomeScreen() {
                         : (activeRide as any).customer_name || activeRide.customer?.name || 'Customer'}
                     </Text>
                     <Text style={styles.customerMeta}>
-                      {activeRide.payment_method === 'cash' ? 'Cash' : 'Online'} • ₹{Math.round(activeRide.fare)}
+                      Cash • ₹{Math.round(activeRide.fare)}
                     </Text>
                     <Text style={styles.driverStatsLine}>
                       {activeRide.driver_average_rating != null
