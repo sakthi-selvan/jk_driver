@@ -9,9 +9,9 @@ export default {
     userInterfaceStyle: "light",
     newArchEnabled: true,
     splash: {
-      image: "./assets/images/splash-icon.png",
+      image: "./assets/images/jk_taxi_driver_logo.png",
       resizeMode: "contain",
-      backgroundColor: "#0B3A8A",
+      backgroundColor: "#FFFFFF",
     },
     ios: {
       supportsTablet: true,
@@ -28,7 +28,7 @@ export default {
     },
     android: {
       adaptiveIcon: {
-        backgroundColor: "#0B3A8A",
+        backgroundColor: "#FFFFFF",
         foregroundImage: "./assets/images/android-icon-foreground.png",
         backgroundImage: "./assets/images/android-icon-background.png",
         monochromeImage: "./assets/images/android-icon-monochrome.png",
@@ -57,8 +57,8 @@ export default {
       favicon: "./assets/images/favicon.png",
       name: "JK Taxi Driver",
       shortName: "JK Driver",
-      themeColor: "#0B3A8A",
-      backgroundColor: "#0B3A8A",
+      themeColor: "#FFFFFF",
+      backgroundColor: "#FFFFFF",
     },
     plugins: [
       "expo-router",
@@ -73,16 +73,16 @@ export default {
       [
         "expo-splash-screen",
         {
-          image: "./assets/images/splash-icon.png",
+          image: "./assets/images/jk_taxi_driver_logo.png",
           // Android 12+ circular mask — padding baked into splash-icon.png
           imageWidth: 260,
           resizeMode: "contain",
-          backgroundColor: "#0B3A8A",
+          backgroundColor: "#FFFFFF",
           dark: {
-            image: "./assets/images/splash-icon.png",
+            image: "./assets/images/jk_taxi_driver_logo.png",
             imageWidth: 260,
             resizeMode: "contain",
-            backgroundColor: "#0B3A8A",
+            backgroundColor: "#FFFFFF",
           },
         },
       ],
